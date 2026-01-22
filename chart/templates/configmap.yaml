@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hdmi-multiviewer-proxy.fullname" . }}
+  labels:
+    {{- include "hdmi-multiviewer-proxy.labels" . | nindent 4 }}
+data:
+  SERIAL_PORT: {{ .Values.serial.port | quote }}
+  SERIAL_BAUD_RATE: {{ .Values.serial.baudRate | quote }}
+  SERIAL_TIMEOUT: {{ .Values.serial.timeout | quote }}
+  SERIAL_HEARTBEAT_INTERVAL: {{ .Values.serial.heartbeatInterval | quote }}
+  SERIAL_RECONNECT_BACKOFF_MAX: {{ .Values.serial.reconnectBackoffMax | quote }}
+  SERVER_PORT: {{ .Values.service.port | quote }}
+  LOG_LEVEL: {{ .Values.logging.level | quote }}
+  LOG_JSON: {{ .Values.logging.json | quote }}

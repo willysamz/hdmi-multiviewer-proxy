@@ -1,0 +1,1856 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HDMI Multiviewer Proxy",
+    "description": "REST API for controlling UHD-401MV multiviewer via RS-232",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz/live": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Liveness Probe",
+        "description": "Liveness probe for Kubernetes.\n\nReturns 200 if the FastAPI process is running.\nUsed by Kubernetes to restart the pod if the process hangs.",
+        "operationId": "liveness_probe_healthz_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz/ready": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Readiness Probe",
+        "description": "Readiness probe for Kubernetes.\n\nReturns 200 if the service can accept requests (serial handler initialized).\nReturns 503 if still initializing or in a bad state.\nUsed by Kubernetes to remove pod from service endpoints during issues.",
+        "operationId": "readiness_probe_healthz_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Get Status",
+        "description": "Get device status.\n\nReturns connection state, power state, device info, and firmware version.",
+        "operationId": "get_status_api_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/power": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Set Power",
+        "description": "Set device power state.\n\nPower on or off the device.",
+        "operationId": "set_power_api_power_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PowerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PowerResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reboot": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Reboot Device",
+        "description": "Reboot the device.\n\nThe device will restart and take a few seconds to become available again.",
+        "operationId": "reboot_device_api_reboot_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Reboot Device Api Reboot Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reset": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Factory Reset",
+        "description": "Reset device to factory defaults.\n\nWARNING: This will erase all settings and restore factory defaults.",
+        "operationId": "factory_reset_api_reset_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Factory Reset Api Reset Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/multiview": {
+      "get": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Get Multiview",
+        "description": "Get current multiview display mode.",
+        "operationId": "get_multiview_api_multiview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiviewResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Set Multiview",
+        "description": "Set multiview display mode.",
+        "operationId": "set_multiview_api_multiview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/windows": {
+      "get": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Get Windows",
+        "description": "Get all window-to-input mappings.",
+        "operationId": "get_windows_api_windows_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WindowsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/windows/{window_id}": {
+      "get": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Get Window Input",
+        "description": "Get input source for a specific window.",
+        "operationId": "get_window_input_api_windows__window_id__get",
+        "parameters": [
+          {
+            "name": "window_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 4,
+              "minimum": 1,
+              "description": "Window ID (1-4)",
+              "title": "Window Id"
+            },
+            "description": "Window ID (1-4)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WindowInput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/windows/{window_id}/input": {
+      "post": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Set Window Input",
+        "description": "Set input source for a specific window.",
+        "operationId": "set_window_input_api_windows__window_id__input_post",
+        "parameters": [
+          {
+            "name": "window_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 4,
+              "minimum": 1,
+              "description": "Window ID (1-4)",
+              "title": "Window Id"
+            },
+            "description": "Window ID (1-4)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWindowInputRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WindowInput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/input": {
+      "get": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Get Input Source",
+        "description": "Get current input source (single screen mode).",
+        "operationId": "get_input_source_api_input_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputSourceResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Set Input Source",
+        "description": "Set input source (single screen mode).",
+        "operationId": "set_input_source_api_input_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetInputSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputSourceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pip": {
+      "get": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Get Pip Settings",
+        "description": "Get PIP window settings.",
+        "operationId": "get_pip_settings_api_pip_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PIPResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Set Pip Settings",
+        "description": "Set PIP window settings.",
+        "operationId": "set_pip_settings_api_pip_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPIPRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PIPResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pbp": {
+      "get": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Get Pbp Settings",
+        "description": "Get PBP window settings.",
+        "operationId": "get_pbp_settings_api_pbp_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PBPResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Set Pbp Settings",
+        "description": "Set PBP window settings.",
+        "operationId": "set_pbp_settings_api_pbp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPBPRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PBPResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/triple": {
+      "get": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Get Triple Settings",
+        "description": "Get triple screen settings.",
+        "operationId": "get_triple_settings_api_triple_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripleQuadResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Set Triple Settings",
+        "description": "Set triple screen settings.",
+        "operationId": "set_triple_settings_api_triple_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTripleQuadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripleQuadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quad": {
+      "get": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Get Quad Settings",
+        "description": "Get quad screen settings.",
+        "operationId": "get_quad_settings_api_quad_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripleQuadResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Display"
+        ],
+        "summary": "Set Quad Settings",
+        "description": "Set quad screen settings.",
+        "operationId": "set_quad_settings_api_quad_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTripleQuadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripleQuadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audio": {
+      "get": {
+        "tags": [
+          "Audio"
+        ],
+        "summary": "Get Audio",
+        "description": "Get current audio settings (source, volume, mute).",
+        "operationId": "get_audio_api_audio_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audio/source": {
+      "post": {
+        "tags": [
+          "Audio"
+        ],
+        "summary": "Set Audio Source",
+        "description": "Set audio source.\n\n- 0: Follow window 1 selected source\n- 1: HDMI 1 input audio\n- 2: HDMI 2 input audio\n- 3: HDMI 3 input audio\n- 4: HDMI 4 input audio",
+        "operationId": "set_audio_source_api_audio_source_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAudioSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audio/volume": {
+      "post": {
+        "tags": [
+          "Audio"
+        ],
+        "summary": "Set Audio Volume",
+        "description": "Set audio volume (0-100).",
+        "operationId": "set_audio_volume_api_audio_volume_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetVolumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audio/volume/up": {
+      "post": {
+        "tags": [
+          "Audio"
+        ],
+        "summary": "Increase Volume",
+        "description": "Increase audio volume by one step.",
+        "operationId": "increase_volume_api_audio_volume_up_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audio/volume/down": {
+      "post": {
+        "tags": [
+          "Audio"
+        ],
+        "summary": "Decrease Volume",
+        "description": "Decrease audio volume by one step.",
+        "operationId": "decrease_volume_api_audio_volume_down_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audio/mute": {
+      "post": {
+        "tags": [
+          "Audio"
+        ],
+        "summary": "Set Audio Mute",
+        "description": "Set audio mute state.",
+        "operationId": "set_audio_mute_api_audio_mute_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetMuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audio/mute/toggle": {
+      "post": {
+        "tags": [
+          "Audio"
+        ],
+        "summary": "Toggle Mute",
+        "description": "Toggle audio mute state.",
+        "operationId": "toggle_mute_api_audio_mute_toggle_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/output": {
+      "get": {
+        "tags": [
+          "Output"
+        ],
+        "summary": "Get Output",
+        "description": "Get current output settings (resolution, HDCP, video mode).",
+        "operationId": "get_output_api_output_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/output/resolution": {
+      "post": {
+        "tags": [
+          "Output"
+        ],
+        "summary": "Set Resolution",
+        "description": "Set output resolution.\n\nResolution values:\n- 1: 4096x2160p60\n- 2: 4096x2160p50\n- 3: 3840x2160p60\n- 4: 3840x2160p50\n- 5: 3840x2160p30\n- 6: 3840x2160p25\n- 7: 1920x1200p60RB\n- 8: 1920x1080p60\n- 9: 1920x1080p50\n- 10: 1360x768p60\n- 11: 1280x800p60\n- 12: 1280x720p60\n- 13: 1280x720p50\n- 14: 1024x768p60",
+        "operationId": "set_resolution_api_output_resolution_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/output/resolutions": {
+      "get": {
+        "tags": [
+          "Output"
+        ],
+        "summary": "Get Available Resolutions",
+        "description": "Get list of available output resolutions.",
+        "operationId": "get_available_resolutions_api_output_resolutions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Available Resolutions Api Output Resolutions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/output/hdcp": {
+      "post": {
+        "tags": [
+          "Output"
+        ],
+        "summary": "Set Hdcp",
+        "description": "Set HDCP mode.\n\n- 1: HDCP 1.4\n- 2: HDCP 2.2\n- 3: OFF",
+        "operationId": "set_hdcp_api_output_hdcp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetHDCPRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/output/video-mode": {
+      "post": {
+        "tags": [
+          "Output"
+        ],
+        "summary": "Set Video Mode",
+        "description": "Set video mode (ITC).\n\n- 1: Video mode\n- 2: PC mode",
+        "operationId": "set_video_mode_api_output_video_mode_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetVideoModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/output/vka": {
+      "post": {
+        "tags": [
+          "Output"
+        ],
+        "summary": "Set Vka Pattern",
+        "description": "Set video keep active pattern.\n\n- 1: Black screen\n- 2: Blue screen",
+        "operationId": "set_vka_pattern_api_output_vka_post",
+        "parameters": [
+          {
+            "name": "pattern",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pattern"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "description": "Root endpoint with API info.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Root  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AudioResponse": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume"
+          },
+          "muted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Muted"
+          }
+        },
+        "type": "object",
+        "title": "AudioResponse",
+        "description": "Audio state response."
+      },
+      "ConnectionState": {
+        "type": "string",
+        "enum": [
+          "unavailable",
+          "off",
+          "on"
+        ],
+        "title": "ConnectionState",
+        "description": "Device connection state."
+      },
+      "DeviceStatus": {
+        "properties": {
+          "connection": {
+            "$ref": "#/components/schemas/ConnectionState"
+          },
+          "power": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power"
+          },
+          "device_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Type"
+          },
+          "firmware": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firmware"
+          },
+          "port": {
+            "type": "string",
+            "title": "Port"
+          },
+          "last_heartbeat": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connection",
+          "port"
+        ],
+        "title": "DeviceStatus",
+        "description": "Device status response."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "serial_connected": {
+            "type": "boolean",
+            "title": "Serial Connected"
+          },
+          "device_state": {
+            "$ref": "#/components/schemas/ConnectionState"
+          },
+          "last_heartbeat": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat"
+          },
+          "uptime_seconds": {
+            "type": "number",
+            "title": "Uptime Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "serial_connected",
+          "device_state",
+          "last_heartbeat",
+          "uptime_seconds"
+        ],
+        "title": "HealthResponse",
+        "description": "Health check response."
+      },
+      "InputSourceResponse": {
+        "properties": {
+          "input": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input"
+          },
+          "input_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "title": "InputSourceResponse",
+        "description": "Single screen input source response."
+      },
+      "MultiviewModeEnum": {
+        "type": "string",
+        "enum": [
+          "single",
+          "pip",
+          "pbp",
+          "triple",
+          "quad"
+        ],
+        "title": "MultiviewModeEnum",
+        "description": "Multiview display modes."
+      },
+      "MultiviewRequest": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/MultiviewModeEnum"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "MultiviewRequest",
+        "description": "Multiview mode request."
+      },
+      "MultiviewResponse": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MultiviewModeEnum"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "MultiviewResponse",
+        "description": "Multiview mode response."
+      },
+      "OutputResponse": {
+        "properties": {
+          "resolution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
+          },
+          "hdcp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hdcp"
+          },
+          "video_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Mode"
+          },
+          "vka_pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vka Pattern"
+          }
+        },
+        "type": "object",
+        "title": "OutputResponse",
+        "description": "Output settings response."
+      },
+      "PBPResponse": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "aspect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect"
+          }
+        },
+        "type": "object",
+        "title": "PBPResponse",
+        "description": "PBP settings response."
+      },
+      "PIPResponse": {
+        "properties": {
+          "position": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "title": "PIPResponse",
+        "description": "PIP settings response."
+      },
+      "PowerRequest": {
+        "properties": {
+          "power": {
+            "type": "boolean",
+            "title": "Power"
+          }
+        },
+        "type": "object",
+        "required": [
+          "power"
+        ],
+        "title": "PowerRequest",
+        "description": "Power control request."
+      },
+      "PowerResponse": {
+        "properties": {
+          "power": {
+            "type": "boolean",
+            "title": "Power"
+          }
+        },
+        "type": "object",
+        "required": [
+          "power"
+        ],
+        "title": "PowerResponse",
+        "description": "Power control response."
+      },
+      "SetAudioSourceRequest": {
+        "properties": {
+          "source": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Source",
+            "description": "0=follow window 1, 1-4=HDMI inputs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "SetAudioSourceRequest",
+        "description": "Set audio source request."
+      },
+      "SetHDCPRequest": {
+        "properties": {
+          "hdcp": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Hdcp",
+            "description": "1=HDCP 1.4, 2=HDCP 2.2, 3=OFF"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hdcp"
+        ],
+        "title": "SetHDCPRequest",
+        "description": "Set HDCP request."
+      },
+      "SetInputSourceRequest": {
+        "properties": {
+          "input": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Input"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "title": "SetInputSourceRequest",
+        "description": "Set single screen input request."
+      },
+      "SetMuteRequest": {
+        "properties": {
+          "muted": {
+            "type": "boolean",
+            "title": "Muted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "muted"
+        ],
+        "title": "SetMuteRequest",
+        "description": "Set mute request."
+      },
+      "SetPBPRequest": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "aspect": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect",
+            "description": "1=full_screen, 2=16:9"
+          }
+        },
+        "type": "object",
+        "title": "SetPBPRequest",
+        "description": "Set PBP settings request."
+      },
+      "SetPIPRequest": {
+        "properties": {
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position",
+            "description": "1=left_top, 2=left_bottom, 3=right_top, 4=right_bottom"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size",
+            "description": "1=small, 2=middle, 3=large"
+          }
+        },
+        "type": "object",
+        "title": "SetPIPRequest",
+        "description": "Set PIP settings request."
+      },
+      "SetResolutionRequest": {
+        "properties": {
+          "resolution": {
+            "type": "integer",
+            "maximum": 14.0,
+            "minimum": 1.0,
+            "title": "Resolution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resolution"
+        ],
+        "title": "SetResolutionRequest",
+        "description": "Set resolution request."
+      },
+      "SetTripleQuadRequest": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "aspect": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect",
+            "description": "1=full_screen, 2=16:9"
+          }
+        },
+        "type": "object",
+        "title": "SetTripleQuadRequest",
+        "description": "Set Triple/Quad settings request."
+      },
+      "SetVideoModeRequest": {
+        "properties": {
+          "mode": {
+            "type": "integer",
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Mode",
+            "description": "1=video, 2=pc"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "SetVideoModeRequest",
+        "description": "Set video mode request."
+      },
+      "SetVolumeRequest": {
+        "properties": {
+          "volume": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Volume"
+          }
+        },
+        "type": "object",
+        "required": [
+          "volume"
+        ],
+        "title": "SetVolumeRequest",
+        "description": "Set volume request."
+      },
+      "SetWindowInputRequest": {
+        "properties": {
+          "input": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Input"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "title": "SetWindowInputRequest",
+        "description": "Set window input request."
+      },
+      "TripleQuadResponse": {
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "aspect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect"
+          }
+        },
+        "type": "object",
+        "title": "TripleQuadResponse",
+        "description": "Triple/Quad settings response."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WindowInput": {
+        "properties": {
+          "window": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Window"
+          },
+          "input": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Input"
+          },
+          "input_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "window",
+          "input"
+        ],
+        "title": "WindowInput",
+        "description": "Window input mapping."
+      },
+      "WindowsResponse": {
+        "properties": {
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/WindowInput"
+            },
+            "type": "array",
+            "title": "Windows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "windows"
+        ],
+        "title": "WindowsResponse",
+        "description": "All windows input mappings response."
+      }
+    }
+  }
+}
