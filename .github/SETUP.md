@@ -55,14 +55,14 @@ This will trigger the release workflow which:
 ### Docker Image
 
 ```bash
-docker pull ghcr.io/wsamuels/hdmi-multiviewer-proxy:latest
-docker pull ghcr.io/wsamuels/hdmi-multiviewer-proxy:0.1.0
+docker pull ghcr.io/willysamz/hdmi-multiviewer-proxy:latest
+docker pull ghcr.io/willysamz/hdmi-multiviewer-proxy:0.1.0
 ```
 
 ### Helm Chart
 
 ```bash
-helm repo add hdmi-multiviewer-proxy https://wsamuels.github.io/hdmi-multiviewer-proxy
+helm repo add hdmi-multiviewer-proxy https://willysamz.github.io/hdmi-multiviewer-proxy
 helm repo update
 helm install mviewer hdmi-multiviewer-proxy/hdmi-multiviewer-proxy
 ```

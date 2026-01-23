@@ -181,6 +181,42 @@ input_select:
       - "HDMI 4"
     icon: mdi:speaker
 
+  multiviewer_window_1_input:
+    name: "Window 1 Input"
+    options:
+      - "HDMI 1"
+      - "HDMI 2"
+      - "HDMI 3"
+      - "HDMI 4"
+    icon: mdi:monitor-screenshot
+
+  multiviewer_window_2_input:
+    name: "Window 2 Input"
+    options:
+      - "HDMI 1"
+      - "HDMI 2"
+      - "HDMI 3"
+      - "HDMI 4"
+    icon: mdi:monitor-screenshot
+
+  multiviewer_window_3_input:
+    name: "Window 3 Input"
+    options:
+      - "HDMI 1"
+      - "HDMI 2"
+      - "HDMI 3"
+      - "HDMI 4"
+    icon: mdi:monitor-screenshot
+
+  multiviewer_window_4_input:
+    name: "Window 4 Input"
+    options:
+      - "HDMI 1"
+      - "HDMI 2"
+      - "HDMI 3"
+      - "HDMI 4"
+    icon: mdi:monitor-screenshot
+
 input_number:
   multiviewer_volume:
     name: "Multiviewer Volume"
@@ -232,6 +268,74 @@ automation:
               "HDMI 4": 4
             } %}
             {{ mapping[states('input_select.multiviewer_audio_source')] }}
+
+  # Sync window 1 input selection to device
+  - alias: "Multiviewer: Set Window 1 Input"
+    trigger:
+      - platform: state
+        entity_id: input_select.multiviewer_window_1_input
+    condition:
+      - condition: state
+        entity_id: binary_sensor.multiviewer_connected
+        state: "on"
+    action:
+      - service: rest_command.multiviewer_set_window_input
+        data:
+          window: 1
+          input: >
+            {% set mapping = {"HDMI 1": 1, "HDMI 2": 2, "HDMI 3": 3, "HDMI 4": 4} %}
+            {{ mapping[states('input_select.multiviewer_window_1_input')] }}
+
+  # Sync window 2 input selection to device
+  - alias: "Multiviewer: Set Window 2 Input"
+    trigger:
+      - platform: state
+        entity_id: input_select.multiviewer_window_2_input
+    condition:
+      - condition: state
+        entity_id: binary_sensor.multiviewer_connected
+        state: "on"
+    action:
+      - service: rest_command.multiviewer_set_window_input
+        data:
+          window: 2
+          input: >
+            {% set mapping = {"HDMI 1": 1, "HDMI 2": 2, "HDMI 3": 3, "HDMI 4": 4} %}
+            {{ mapping[states('input_select.multiviewer_window_2_input')] }}
+
+  # Sync window 3 input selection to device
+  - alias: "Multiviewer: Set Window 3 Input"
+    trigger:
+      - platform: state
+        entity_id: input_select.multiviewer_window_3_input
+    condition:
+      - condition: state
+        entity_id: binary_sensor.multiviewer_connected
+        state: "on"
+    action:
+      - service: rest_command.multiviewer_set_window_input
+        data:
+          window: 3
+          input: >
+            {% set mapping = {"HDMI 1": 1, "HDMI 2": 2, "HDMI 3": 3, "HDMI 4": 4} %}
+            {{ mapping[states('input_select.multiviewer_window_3_input')] }}
+
+  # Sync window 4 input selection to device
+  - alias: "Multiviewer: Set Window 4 Input"
+    trigger:
+      - platform: state
+        entity_id: input_select.multiviewer_window_4_input
+    condition:
+      - condition: state
+        entity_id: binary_sensor.multiviewer_connected
+        state: "on"
+    action:
+      - service: rest_command.multiviewer_set_window_input
+        data:
+          window: 4
+          input: >
+            {% set mapping = {"HDMI 1": 1, "HDMI 2": 2, "HDMI 3": 3, "HDMI 4": 4} %}
+            {{ mapping[states('input_select.multiviewer_window_4_input')] }}
 
   # Sync volume slider to device
   - alias: "Multiviewer: Set Volume"
@@ -397,17 +501,48 @@ cards:
           action: call-service
           service: script.work_quad_view
 
-  - type: glance
+  - type: entities
     title: Window Inputs
     entities:
-      - entity: sensor.multiviewer_window_1
-        name: Win 1
-      - entity: sensor.multiviewer_window_2
-        name: Win 2
-      - entity: sensor.multiviewer_window_3
-        name: Win 3
-      - entity: sensor.multiviewer_window_4
-        name: Win 4
+      - entity: input_select.multiviewer_window_1_input
+        name: Window 1
+      - entity: input_select.multiviewer_window_2_input
+        name: Window 2
+      - entity: input_select.multiviewer_window_3_input
+        name: Window 3
+      - entity: input_select.multiviewer_window_4_input
+        name: Window 4
+```
+
+### Alternative: Grid Layout for Window Inputs
+
+For a more compact 2x2 grid layout matching the quad view:
+
+```yaml
+type: grid
+columns: 2
+square: false
+cards:
+  - type: tile
+    entity: input_select.multiviewer_window_1_input
+    name: Window 1
+    icon: mdi:numeric-1-box
+    color: blue
+  - type: tile
+    entity: input_select.multiviewer_window_2_input
+    name: Window 2
+    icon: mdi:numeric-2-box
+    color: green
+  - type: tile
+    entity: input_select.multiviewer_window_3_input
+    name: Window 3
+    icon: mdi:numeric-3-box
+    color: orange
+  - type: tile
+    entity: input_select.multiviewer_window_4_input
+    name: Window 4
+    icon: mdi:numeric-4-box
+    color: red
 ```
 
 ## Time-Based Automations

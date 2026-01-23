@@ -145,7 +145,7 @@ class WindowInput(BaseModel):
     """Window input mapping."""
 
     window: int = Field(ge=1, le=4)
-    input: int = Field(ge=1, le=4)
+    input: int = Field(ge=0, le=4)  # 0 = unknown/unavailable
     input_name: str | None = None
 
 

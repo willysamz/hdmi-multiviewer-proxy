@@ -1,12 +1,13 @@
 # Default values for hdmi-multiviewer-proxy
-# See https://github.com/wsamuels/hdmi-multiviewer-proxy for documentation
+# See https://github.com/willysamz/hdmi-multiviewer-proxy for documentation
 
 replicaCount: 1
 
 image:
-  repository: ghcr.io/wsamuels/hdmi-multiviewer-proxy
+  repository: ghcr.io/willysamz/hdmi-multiviewer-proxy
   pullPolicy: IfNotPresent
-  tag: "latest"
+  # Defaults to appVersion from Chart.yaml if not set
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""

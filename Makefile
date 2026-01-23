@@ -1,7 +1,7 @@
 # Multiviewer Serial Proxy Makefile
 
 # Configuration
-IMAGE_NAME ?= ghcr.io/wsamuels/hdmi-multiviewer-proxy
+IMAGE_NAME ?= ghcr.io/willysamz/hdmi-multiviewer-proxy
 IMAGE_TAG ?= latest
 
 # Python

@@ -20,14 +20,14 @@ docker run -d \
   --name hdmi-multiviewer-proxy \
   --device /dev/ttyUSB0:/dev/ttyUSB0 \
   -p 8080:8080 \
-  ghcr.io/wsamuels/hdmi-multiviewer-proxy:latest
+  ghcr.io/willysamz/hdmi-multiviewer-proxy:latest
 ```
 
 ### Using Helm
 
 ```bash
 # Add the Helm repository
-helm repo add hdmi-multiviewer-proxy https://wsamuels.github.io/hdmi-multiviewer-proxy
+helm repo add hdmi-multiviewer-proxy https://willysamz.github.io/hdmi-multiviewer-proxy
 helm repo update
 
 # Install the chart
