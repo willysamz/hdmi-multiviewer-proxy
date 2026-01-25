@@ -20,10 +20,12 @@ rest:
     scan_interval: 30
     sensor:
       - name: "Multiviewer Connection"
+        unique_id: multiviewer_connection
         value_template: "{{ value_json.connection }}"
         icon: mdi:connection
     binary_sensor:
       - name: "Multiviewer Connected"
+        unique_id: multiviewer_connected
         value_template: "{{ value_json.connection != 'unavailable' }}"
         device_class: connectivity
 
@@ -32,14 +34,17 @@ rest:
     scan_interval: 30
     sensor:
       - name: "Multiviewer Audio Source"
+        unique_id: multiviewer_audio_source
         value_template: "{{ value_json.source_name }}"
         icon: mdi:speaker
       - name: "Multiviewer Volume"
+        unique_id: multiviewer_volume
         value_template: "{{ value_json.volume }}"
         icon: mdi:volume-high
         unit_of_measurement: "%"
     binary_sensor:
       - name: "Multiviewer Muted"
+        unique_id: multiviewer_muted
         value_template: "{{ value_json.muted }}"
         device_class: sound
 
@@ -48,6 +53,7 @@ rest:
     scan_interval: 30
     sensor:
       - name: "Multiviewer Mode"
+        unique_id: multiviewer_mode
         value_template: "{{ value_json.mode }}"
         icon: mdi:monitor
 
@@ -56,15 +62,19 @@ rest:
     scan_interval: 30
     sensor:
       - name: "Multiviewer Window 1"
+        unique_id: multiviewer_window_1
         value_template: "{{ value_json.windows[0].input_name }}"
         icon: mdi:monitor-screenshot
       - name: "Multiviewer Window 2"
+        unique_id: multiviewer_window_2
         value_template: "{{ value_json.windows[1].input_name }}"
         icon: mdi:monitor-screenshot
       - name: "Multiviewer Window 3"
+        unique_id: multiviewer_window_3
         value_template: "{{ value_json.windows[2].input_name }}"
         icon: mdi:monitor-screenshot
       - name: "Multiviewer Window 4"
+        unique_id: multiviewer_window_4
         value_template: "{{ value_json.windows[3].input_name }}"
         icon: mdi:monitor-screenshot
 
@@ -73,9 +83,12 @@ rest:
     scan_interval: 60
     sensor:
       - name: "Multiviewer Resolution"
+        unique_id: multiviewer_resolution
         value_template: "{{ value_json.resolution }}"
         icon: mdi:monitor-shimmer
 ```
+
+> **Tip:** After adding these sensors, create an **Area** called "Multiviewer" in Home Assistant (Settings → Areas & Zones), then assign all multiviewer entities to it. This groups them together in the UI and allows voice commands like "What's the status of the Multiviewer area?"
 
 ### Commands (Control Device)
 
