@@ -1,5 +1,7 @@
 """FastAPI application entry point."""
 
+import asyncio
+import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -9,7 +11,10 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.config import settings
+from app.controller import Controller, ControllerError
 from app.dependencies import set_serial_handler, set_startup_time
+from app.mqtt_client import MqttClient
+from app.poller import Poller
 from app.routers import audio, display, health, output, system
 from app.serial_handler import SerialHandler
 
@@ -38,11 +43,21 @@ log = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan manager."""
-    set_startup_time(datetime.now(UTC))
-    log.info("starting_application", version=__version__, port=settings.server_port)
+    """Application lifespan manager.
 
-    # Initialize serial handler
+    v0.2+: alongside the existing serial handler, optionally bring up an
+    MQTT session, a state-polling task that publishes to MQTT, and a
+    command-topic subscriber that translates HA select/switch/number
+    actions back into serial commands.
+    """
+    set_startup_time(datetime.now(UTC))
+    log.info(
+        "starting_application",
+        version=__version__,
+        port=settings.server_port,
+        mqtt_enabled=settings.mqtt_enabled,
+    )
+
     serial_handler = SerialHandler(
         port=settings.serial_port,
         baud_rate=settings.serial_baud_rate,
@@ -51,20 +66,127 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         reconnect_backoff_max=settings.serial_reconnect_backoff_max,
     )
     set_serial_handler(serial_handler)
-
-    # Start the serial handler
     await serial_handler.start()
 
-    yield
+    # MQTT path is opt-in. Without it the proxy behaves like v0.1.x.
+    mqtt_ctx = None
+    poller: Poller | None = None
+    command_task: asyncio.Task | None = None
 
-    # Cleanup
-    log.info("shutting_down_application")
-    await serial_handler.stop()
+    if settings.mqtt_enabled:
+        mqtt = MqttClient(
+            host=settings.mqtt_host,
+            port=settings.mqtt_port,
+            username=settings.mqtt_username,
+            password=settings.mqtt_password,
+            client_id=settings.mqtt_client_id,
+            keepalive=settings.mqtt_keepalive,
+            qos=settings.mqtt_qos,
+            availability_topic=f"{settings.mqtt_topic_prefix.strip('/')}/bridge/available",
+        )
+        poller = Poller(serial=serial_handler, mqtt=mqtt, settings=settings)
+        controller = Controller(
+            serial=serial_handler, mqtt=mqtt, poller=poller, settings=settings
+        )
+
+        mqtt_ctx = mqtt.session()
+        await mqtt_ctx.__aenter__()
+        await poller.start()
+        command_task = asyncio.create_task(
+            _command_subscriber(mqtt, controller, settings.mqtt_topic_prefix)
+        )
+
+    try:
+        yield
+    finally:
+        log.info("shutting_down_application")
+        if command_task is not None:
+            command_task.cancel()
+        if poller is not None:
+            await poller.stop()
+        if mqtt_ctx is not None:
+            await mqtt_ctx.__aexit__(None, None, None)
+        await serial_handler.stop()
+
+
+# Regexes for parsing command topics — anchored on the topic-prefix wildcard.
+_POWER_SET_RE = re.compile(r"^[^/]+/power/set$")
+_MODE_SET_RE = re.compile(r"^[^/]+/mode/set$")
+_WINDOW_SET_RE = re.compile(r"^[^/]+/windows/(?P<n>\d+)/set$")
+_AUDIO_SOURCE_SET_RE = re.compile(r"^[^/]+/audio/source/set$")
+_AUDIO_VOLUME_SET_RE = re.compile(r"^[^/]+/audio/volume/set$")
+_AUDIO_MUTED_SET_RE = re.compile(r"^[^/]+/audio/muted/set$")
+_PIP_POSITION_SET_RE = re.compile(r"^[^/]+/pip/position/set$")
+_PIP_SIZE_SET_RE = re.compile(r"^[^/]+/pip/size/set$")
+
+
+async def _command_subscriber(
+    mqtt: MqttClient, controller: Controller, topic_prefix: str
+) -> None:
+    """Subscribe to every command topic and route to the Controller."""
+    prefix = topic_prefix.strip("/")
+    # Subscribe to the per-category wildcards. Order doesn't matter; the
+    # routing logic below disambiguates by regex match.
+    for sub in [
+        f"{prefix}/power/set",
+        f"{prefix}/mode/set",
+        f"{prefix}/windows/+/set",
+        f"{prefix}/audio/source/set",
+        f"{prefix}/audio/volume/set",
+        f"{prefix}/audio/muted/set",
+        f"{prefix}/pip/position/set",
+        f"{prefix}/pip/size/set",
+    ]:
+        await mqtt.subscribe(sub)
+    log.info("command_subscriber_started", prefix=prefix)
+
+    async for msg in mqtt.messages:
+        topic_str = str(msg.topic)
+        raw = msg.payload
+        if isinstance(raw, bytes | bytearray):
+            payload = bytes(raw).decode("utf-8", errors="replace").strip()
+        elif isinstance(raw, str):
+            payload = raw.strip()
+        else:
+            log.warning(
+                "command_subscriber_bad_payload",
+                topic=topic_str,
+                type=type(raw).__name__,
+            )
+            continue
+
+        try:
+            if _POWER_SET_RE.match(topic_str):
+                await controller.set_power(payload.upper())
+            elif _MODE_SET_RE.match(topic_str):
+                await controller.set_mode(payload)
+            elif (m := _WINDOW_SET_RE.match(topic_str)) is not None:
+                await controller.set_window_input(int(m.group("n")), payload)
+            elif _AUDIO_SOURCE_SET_RE.match(topic_str):
+                await controller.set_audio_source(payload)
+            elif _AUDIO_VOLUME_SET_RE.match(topic_str):
+                await controller.set_audio_volume(payload)
+            elif _AUDIO_MUTED_SET_RE.match(topic_str):
+                await controller.set_audio_mute(payload.upper())
+            elif _PIP_POSITION_SET_RE.match(topic_str):
+                await controller.set_pip_position(payload)
+            elif _PIP_SIZE_SET_RE.match(topic_str):
+                await controller.set_pip_size(payload)
+            else:
+                log.warning("command_subscriber_unmatched_topic", topic=topic_str)
+        except ControllerError as exc:
+            log.warning("command_rejected", topic=topic_str, error=str(exc))
+        except Exception as exc:  # pragma: no cover
+            log.warning("command_failed", topic=topic_str, error=str(exc))
 
 
 app = FastAPI(
     title="HDMI Multiviewer Proxy",
-    description="REST API for controlling UHD-401MV multiviewer via RS-232",
+    description=(
+        "REST + MQTT proxy for UHD-401MV multiviewer (RS-232). v0.2 adds "
+        "optional MQTT publishing with Home Assistant discovery; the REST "
+        "endpoints stay available for direct scripting + debug."
+    ),
     version=__version__,
     lifespan=lifespan,
 )

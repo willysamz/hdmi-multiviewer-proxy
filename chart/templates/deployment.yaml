@@ -41,6 +41,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "hdmi-multiviewer-proxy.fullname" . }}
+            {{- if .Values.mqtt.password }}
+            - secretRef:
+                name: {{ include "hdmi-multiviewer-proxy.fullname" . }}
+            {{- end }}
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}

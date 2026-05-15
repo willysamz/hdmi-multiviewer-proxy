@@ -21,6 +21,34 @@ serial:
   heartbeatInterval: 30
   reconnectBackoffMax: 30
 
+# --- MQTT broker (v0.2+) ---
+# Opt-in. When mqtt.enabled is "true" the proxy publishes state + HA
+# discovery and subscribes to per-entity command topics. When "false"
+# the proxy behaves like v0.1.x (REST-only, HA polls the proxy).
+mqtt:
+  enabled: "false"
+  host: "mqtt"
+  port: "1883"
+  clientId: "hdmi-multiviewer-proxy"
+  topicPrefix: "multiviewer"
+  keepalive: "60"
+  qos: "0"
+  # Auth: if the broker requires it, populate username + password.
+  # The chart auto-creates a Secret with the password when set.
+  username: ""
+  password: ""
+  # Routing-state poll interval (seconds). Mirrors HA's 30 s sensor cadence
+  # by default — drop to 5 s for snappier dashboards or raise for less
+  # serial traffic.
+  pollInterval: "10.0"
+
+# --- Home Assistant MQTT discovery (v0.2+) ---
+ha:
+  discoveryEnabled: "true"
+  discoveryPrefix: "homeassistant"
+  deviceName: "HDMI Multiviewer"
+  deviceId: "hdmi_multiviewer"
+
 # Logging configuration
 logging:
   level: INFO

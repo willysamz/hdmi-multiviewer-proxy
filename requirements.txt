@@ -8,6 +8,9 @@ pydantic-settings==2.1.0
 pyserial==3.5
 pyserial-asyncio==0.6
 
+# MQTT (v0.2+)
+aiomqtt==2.0.1
+
 # Utilities
 pyyaml==6.0.1
 structlog==24.1.0
