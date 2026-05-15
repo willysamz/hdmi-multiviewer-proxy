@@ -2,8 +2,27 @@ apiVersion: v1
 entries:
   hdmi-multiviewer-proxy:
   - apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-05-15T20:35:24.356184991Z"
+    description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
+    digest: 7abe7b8b75bd3175990ac68d12f771e4481f09b95480f13fb387c655ae578761
+    keywords:
+    - multiviewer
+    - hdmi
+    - rs232
+    - serial
+    - home-assistant
+    - mqtt
+    maintainers:
+    - name: wsamuels
+    name: hdmi-multiviewer-proxy
+    type: application
+    urls:
+    - https://willysamz.github.io/hdmi-multiviewer-proxy/hdmi-multiviewer-proxy-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
     appVersion: 0.1.2
-    created: "2026-01-23T02:32:55.20061026Z"
+    created: "2026-05-15T20:35:24.355374138Z"
     description: REST API proxy for UHD-401MV multiviewer RS-232 control
     digest: ead520434b2560d9b1cd6aecd718cbd6fe29f15597e89ef70e91f0e5337031b3
     keywords:
@@ -21,7 +40,7 @@ entries:
     version: 0.1.2
   - apiVersion: v2
     appVersion: 0.1.1
-    created: "2026-01-23T02:32:55.200178661Z"
+    created: "2026-05-15T20:35:24.354763646Z"
     description: REST API proxy for UHD-401MV multiviewer RS-232 control
     digest: ea74abd420ab7386d04b5219b56b1a1695d24bc8e6c23d08a88df2287e3492e8
     keywords:
@@ -37,4 +56,4 @@ entries:
     urls:
     - https://willysamz.github.io/hdmi-multiviewer-proxy/hdmi-multiviewer-proxy-0.1.1.tgz
     version: 0.1.1
-generated: "2026-01-23T02:32:55.199695847Z"
+generated: "2026-05-15T20:35:24.353980164Z"
