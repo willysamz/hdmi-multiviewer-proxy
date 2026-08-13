@@ -88,3 +88,19 @@ class TestResponseParser:
         """Test parsing aspect ratio response."""
         assert ResponseParser.parse_aspect("full screen") == "full_screen"
         assert ResponseParser.parse_aspect("16:9") == "16_9"
+
+
+class TestPowerCommands:
+    """Power set-commands must carry the `s` prefix per the device help! output
+    (005. `s power z!` — power on/off the device). The unprefixed `power 0!`
+    was silently ignored by the HDS-401MV, so the power toggle did nothing."""
+
+    def test_power_off_uses_s_prefix(self):
+        from app.commands import Commands
+
+        assert Commands.POWER_OFF == "s power 0!"
+
+    def test_power_on_uses_s_prefix(self):
+        from app.commands import Commands
+
+        assert Commands.POWER_ON == "s power 1!"
