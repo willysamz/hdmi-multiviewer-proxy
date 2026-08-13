@@ -55,14 +55,18 @@ spec:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if hasPrefix "/" .Values.serial.port }}
           volumeMounts:
             - name: serial-device
               mountPath: {{ .Values.serial.port }}
+          {{- end }}
+      {{- if hasPrefix "/" .Values.serial.port }}
       volumes:
         - name: serial-device
           hostPath:
             path: {{ .Values.serial.port }}
             type: CharDevice
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

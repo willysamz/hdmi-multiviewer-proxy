@@ -2,8 +2,8 @@ apiVersion: v2
 name: hdmi-multiviewer-proxy
 description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"
 keywords:
   - multiviewer
   - hdmi
