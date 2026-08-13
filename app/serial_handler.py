@@ -252,8 +252,15 @@ class SerialHandler:
             self._serial.write(command.encode("ascii"))
             self._serial.flush()
 
-            # Read response (may be multiple lines)
-            await asyncio.sleep(0.1)  # Give device time to respond
+            # Wait for the first response byte up to the configured timeout,
+            # then drain trailing lines. A fixed 0.1s wait is too tight for a
+            # higher-latency transport (socket:// over WiFi), where in_waiting
+            # is still 0 at t+0.1s — that produced an empty read that the caller
+            # mistook for a dropped connection and churned reconnects.
+            loop = asyncio.get_event_loop()
+            deadline = loop.time() + self.timeout
+            while loop.time() < deadline and self._serial.in_waiting == 0:
+                await asyncio.sleep(0.02)
 
             response_lines = []
             while self._serial.in_waiting > 0:
@@ -265,9 +272,9 @@ class SerialHandler:
             response = "\n".join(response_lines)
             return response if response else None
 
-        except SerialException as e:
-            log.error("serial_write_error", error=str(e))
-            return None
+        except SerialException:
+            # A real transport error — surface it so the caller reconnects.
+            raise
         except Exception as e:
             log.error("command_error", error=str(e))
             return None
@@ -285,13 +292,20 @@ class SerialHandler:
 
             log.debug("sending_command", command=command.strip())
 
-            response = await self._send_command_internal(command)
-
-            if response is None:
-                # Connection might have been lost
+            try:
+                response = await self._send_command_internal(command)
+            except SerialException as e:
+                # A genuine transport failure — tear down + reconnect.
+                log.warning("command_transport_error", error=str(e))
                 await self._disconnect()
                 self._schedule_reconnect()
                 return False, None, "device_communication_error"
+
+            if response is None:
+                # No reply within the timeout. This is NOT proof the socket is
+                # dead (e.g. a command this model doesn't answer) — report it
+                # without churning the connection.
+                return False, None, "no_response"
 
             log.debug("received_response", response=response)
             return True, response, None

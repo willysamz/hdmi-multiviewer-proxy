@@ -61,3 +61,55 @@ def test_device_path_missing_is_unavailable(monkeypatch):
     ok = _run(h._try_connect())
     assert ok is False
     assert h.state == ConnectionState.UNAVAILABLE
+
+
+class _OpenSerial(_FakeSerial):
+    is_open = True
+
+    def write(self, *a):
+        return None
+
+    def flush(self):
+        return None
+
+
+def test_empty_response_does_not_reconnect(monkeypatch):
+    import serial
+    from app.serial_handler import ConnectionState
+    h = SerialHandler("socket://192.168.1.80:6638", timeout=0.1)
+    h._serial = _OpenSerial()
+    h._state = ConnectionState.ON
+
+    async def _none(_cmd):
+        return None
+    monkeypatch.setattr(h, "_send_command_internal", _none)
+    flags = {"disc": False, "sched": False}
+    async def _disc():
+        flags["disc"] = True
+    monkeypatch.setattr(h, "_disconnect", _disc)
+    monkeypatch.setattr(h, "_schedule_reconnect", lambda: flags.__setitem__("sched", True))
+
+    ok, resp, err = _run(h.send_command("r pip size!"))
+    assert ok is False and err == "no_response"
+    assert flags["disc"] is False and flags["sched"] is False
+
+
+def test_transport_error_reconnects(monkeypatch):
+    import serial
+    from app.serial_handler import ConnectionState
+    h = SerialHandler("socket://192.168.1.80:6638", timeout=0.1)
+    h._serial = _OpenSerial()
+    h._state = ConnectionState.ON
+
+    async def _raise(_cmd):
+        raise serial.SerialException("boom")
+    monkeypatch.setattr(h, "_send_command_internal", _raise)
+    flags = {"disc": False, "sched": False}
+    async def _disc():
+        flags["disc"] = True
+    monkeypatch.setattr(h, "_disconnect", _disc)
+    monkeypatch.setattr(h, "_schedule_reconnect", lambda: flags.__setitem__("sched", True))
+
+    ok, resp, err = _run(h.send_command("r pip size!"))
+    assert ok is False and err == "device_communication_error"
+    assert flags["disc"] is True and flags["sched"] is True
