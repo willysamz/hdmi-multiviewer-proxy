@@ -47,7 +47,7 @@ def _base_payload(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "name": name,
-        "unique_id": object_id,
+        "unique_id": f"{device_id}_{object_id}",
         "object_id": object_id,
         "state_topic": state_topic,
         "availability_topic": availability_topic,
@@ -71,7 +71,7 @@ def power_switch_payload(
 ) -> tuple[str, dict[str, Any]]:
     """`switch.multiviewer_power` — replaces the legacy template switch."""
     object_id = "multiviewer_power"
-    topic = f"{discovery_prefix}/switch/{object_id}/config"
+    topic = f"{discovery_prefix}/switch/{device_id}/{object_id}/config"
     payload = _base_payload(
         object_id=object_id,
         name="Multiviewer Power",
@@ -100,7 +100,7 @@ def connected_binary_sensor_payload(
 ) -> tuple[str, dict[str, Any]]:
     """`binary_sensor.multiviewer_connected` — serial reachability."""
     object_id = "multiviewer_connected"
-    topic = f"{discovery_prefix}/binary_sensor/{object_id}/config"
+    topic = f"{discovery_prefix}/binary_sensor/{device_id}/{object_id}/config"
     payload = _base_payload(
         object_id=object_id,
         name="Multiviewer Connected",
@@ -130,7 +130,7 @@ def _select_payload(
     command_topic: str,
     availability_topic: str,
 ) -> tuple[str, dict[str, Any]]:
-    topic = f"{discovery_prefix}/select/{object_id}/config"
+    topic = f"{discovery_prefix}/select/{device_id}/{object_id}/config"
     payload = _base_payload(
         object_id=object_id,
         name=name,
@@ -214,7 +214,7 @@ def volume_number_payload(
 ) -> tuple[str, dict[str, Any]]:
     """`number.multiviewer_volume` — 0..100 step 5."""
     object_id = "multiviewer_volume"
-    topic = f"{discovery_prefix}/number/{object_id}/config"
+    topic = f"{discovery_prefix}/number/{device_id}/{object_id}/config"
     payload = _base_payload(
         object_id=object_id,
         name="Multiviewer Volume",
@@ -248,7 +248,7 @@ def mute_switch_payload(
     """`switch.multiviewer_muted` — writable. Today this is a read-only
     binary_sensor; promoting to a switch unlocks toggle UX in HA."""
     object_id = "multiviewer_muted"
-    topic = f"{discovery_prefix}/switch/{object_id}/config"
+    topic = f"{discovery_prefix}/switch/{device_id}/{object_id}/config"
     payload = _base_payload(
         object_id=object_id,
         name="Multiviewer Mute",
@@ -277,7 +277,7 @@ def resolution_sensor_payload(
 ) -> tuple[str, dict[str, Any]]:
     """`sensor.multiviewer_resolution` — read-only output resolution."""
     object_id = "multiviewer_resolution"
-    topic = f"{discovery_prefix}/sensor/{object_id}/config"
+    topic = f"{discovery_prefix}/sensor/{device_id}/{object_id}/config"
     payload = _base_payload(
         object_id=object_id,
         name="Multiviewer Resolution",
