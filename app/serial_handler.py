@@ -48,6 +48,11 @@ class SerialHandler:
         self._reconnect_delay = 1.0
         self._initialized = False
 
+        # A device path (/dev/tty*) must exist on the filesystem; a URL port
+        # (socket://host:port, rfc2217://...) is opened directly via
+        # serial_for_url and has no filesystem presence.
+        self._is_url = "://" in port
+
         # Cached device state
         self._cached_power_state: bool | None = None
 
@@ -107,15 +112,15 @@ class SerialHandler:
 
     async def _try_connect(self) -> bool:
         """Attempt to connect to the serial port."""
-        # Check if port exists
-        if not os.path.exists(self.port):
+        # A device path must exist on the filesystem; a URL port (socket://,
+        # rfc2217://) is opened directly and has no filesystem presence.
+        if not self._is_url and not os.path.exists(self.port):
             log.debug("serial_port_not_found", port=self.port)
             self._state = ConnectionState.UNAVAILABLE
             return False
 
         try:
-            self._serial = serial.Serial(
-                port=self.port,
+            serial_kwargs = dict(
                 baudrate=self.baud_rate,
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
@@ -123,6 +128,11 @@ class SerialHandler:
                 timeout=self.timeout,
                 write_timeout=self.timeout,
             )
+            if self._is_url:
+                # serial_for_url handles socket://host:port (and rfc2217://, etc.)
+                self._serial = serial.serial_for_url(self.port, **serial_kwargs)
+            else:
+                self._serial = serial.Serial(port=self.port, **serial_kwargs)
 
             # Clear any stale data
             self._serial.reset_input_buffer()
