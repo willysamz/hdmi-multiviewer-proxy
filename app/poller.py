@@ -134,17 +134,20 @@ class Poller:
         connected = self.serial.state == ConnectionState.ON
         await self._publish_delta(f"{prefix}/connected/state", "ON" if connected else "OFF")
 
-        # Power: prefer the device's own r power! answer; fall back to the
-        # connection heuristic only when the read fails (socket up == assume on).
+        # Power: prefer the device's own r power! answer whenever the transport
+        # is open; fall back to OFF only when the read fails / port is down.
+        # Gated on the LIVE transport status (is_connected), not the cached
+        # `state` (which only updates at connect + the 30s heartbeat and would
+        # otherwise republish a stale value for up to 30s).
         power = None
-        if self.serial.state == ConnectionState.ON:
+        if self.serial.is_connected:
             power = await self._read(Commands.GET_POWER, ResponseParser.parse_power)
-        if power is not None:
+        if power is None:
+            await self._publish_delta(
+                f"{prefix}/power/state", "ON" if self.serial.is_connected else "OFF"
+            )
+        else:
             await self._publish_delta(f"{prefix}/power/state", "ON" if power else "OFF")
-        elif self.serial.state == ConnectionState.ON:
-            await self._publish_delta(f"{prefix}/power/state", "ON")
-        elif self.serial.state == ConnectionState.OFF:
-            await self._publish_delta(f"{prefix}/power/state", "OFF")
 
         # The remaining queries only work when the device is powered ON.
         if not connected:
