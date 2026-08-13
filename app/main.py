@@ -113,6 +113,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 _POWER_SET_RE = re.compile(r"^[^/]+/power/set$")
 _MODE_SET_RE = re.compile(r"^[^/]+/mode/set$")
 _WINDOW_SET_RE = re.compile(r"^[^/]+/windows/(?P<n>\d+)/set$")
+_INPUT_SOURCE_SET_RE = re.compile(r"^[^/]+/input/source/set$")
 _AUDIO_SOURCE_SET_RE = re.compile(r"^[^/]+/audio/source/set$")
 _AUDIO_VOLUME_SET_RE = re.compile(r"^[^/]+/audio/volume/set$")
 _AUDIO_MUTED_SET_RE = re.compile(r"^[^/]+/audio/muted/set$")
@@ -131,6 +132,7 @@ async def _command_subscriber(
         f"{prefix}/power/set",
         f"{prefix}/mode/set",
         f"{prefix}/windows/+/set",
+        f"{prefix}/input/source/set",
         f"{prefix}/audio/source/set",
         f"{prefix}/audio/volume/set",
         f"{prefix}/audio/muted/set",
@@ -162,6 +164,8 @@ async def _command_subscriber(
                 await controller.set_mode(payload)
             elif (m := _WINDOW_SET_RE.match(topic_str)) is not None:
                 await controller.set_window_input(int(m.group("n")), payload)
+            elif _INPUT_SOURCE_SET_RE.match(topic_str):
+                await controller.set_input_source(payload)
             elif _AUDIO_SOURCE_SET_RE.match(topic_str):
                 await controller.set_audio_source(payload)
             elif _AUDIO_VOLUME_SET_RE.match(topic_str):

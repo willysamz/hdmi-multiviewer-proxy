@@ -115,6 +115,17 @@ class Controller:
             f"set window={window_n} input={payload}",
         )
 
+    async def set_input_source(self, payload: str) -> None:
+        hdmi = _WINDOW_INPUT_MAP.get(payload.strip().lower())
+        if hdmi is None:
+            raise ControllerError(
+                f"invalid input source: {payload!r} (expected HDMI 1..4)"
+            )
+        await self._send(
+            Commands.SET_INPUT_SOURCE.format(x=int(hdmi)),
+            f"set input_source={payload}",
+        )
+
     async def set_audio_source(self, payload: str) -> None:
         src = _AUDIO_SOURCE_MAP.get(payload.strip().lower())
         if src is None:

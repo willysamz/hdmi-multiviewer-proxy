@@ -21,6 +21,7 @@ from app.commands import (
 from app.discovery import (
     audio_source_select_payload,
     connected_binary_sensor_payload,
+    input_source_select_payload,
     mode_select_payload,
     mute_switch_payload,
     pip_position_select_payload,
@@ -167,6 +168,13 @@ class Poller:
                     f"{prefix}/windows/{n}/state", f"HDMI {window_in}"
                 )
 
+        # Single-screen input source (drives single mode; s in source)
+        in_src = await self._read(
+            Commands.GET_INPUT_SOURCE, ResponseParser.parse_input_source
+        )
+        if in_src is not None:
+            await self._publish_delta(f"{prefix}/input/source/state", f"HDMI {in_src}")
+
         # Audio source / volume / mute
         audio_src = await self._read(
             Commands.GET_AUDIO_SOURCE, ResponseParser.parse_audio_source
@@ -277,6 +285,14 @@ class Poller:
             )
             await self.mqtt.publish(topic, payload, retain=True)
 
+        # select.multiviewer_input_source
+        topic, payload = input_source_select_payload(
+            **common,
+            state_topic=f"{prefix}/input/source/state",
+            command_topic=f"{prefix}/input/source/set",
+        )
+        await self.mqtt.publish(topic, payload, retain=True)
+
         # select.multiviewer_audio_source
         topic, payload = audio_source_select_payload(
             **common,
@@ -324,4 +340,4 @@ class Poller:
         )
         await self.mqtt.publish(topic, payload, retain=True)
 
-        log.info("ha_discovery_published", device_id=device_id, entities=12)
+        log.info("ha_discovery_published", device_id=device_id, entities=13)

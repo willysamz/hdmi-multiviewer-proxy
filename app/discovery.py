@@ -170,6 +170,18 @@ def window_select_payload(window_n: int, **kw: Any) -> tuple[str, dict[str, Any]
     )
 
 
+def input_source_select_payload(**kw: Any) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_input_source` — single-screen source, HDMI 1..4.
+    Distinct from the window inputs: single mode is driven by `s in source`."""
+    return _select_payload(
+        object_id="multiviewer_input_source",
+        name="Single-Screen Input",
+        icon="mdi:import",
+        options=WINDOW_INPUTS,
+        **kw,
+    )
+
+
 def audio_source_select_payload(**kw: Any) -> tuple[str, dict[str, Any]]:
     """`select.multiviewer_audio_source` — Follow Window 1 / HDMI 1..4."""
     return _select_payload(
