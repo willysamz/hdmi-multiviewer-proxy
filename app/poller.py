@@ -134,8 +134,14 @@ class Poller:
         connected = self.serial.state == ConnectionState.ON
         await self._publish_delta(f"{prefix}/connected/state", "ON" if connected else "OFF")
 
-        # Power: derive from the same state ("ON" or "OFF").
+        # Power: prefer the device's own r power! answer; fall back to the
+        # connection heuristic only when the read fails (socket up == assume on).
+        power = None
         if self.serial.state == ConnectionState.ON:
+            power = await self._read(Commands.GET_POWER, ResponseParser.parse_power)
+        if power is not None:
+            await self._publish_delta(f"{prefix}/power/state", "ON" if power else "OFF")
+        elif self.serial.state == ConnectionState.ON:
             await self._publish_delta(f"{prefix}/power/state", "ON")
         elif self.serial.state == ConnectionState.OFF:
             await self._publish_delta(f"{prefix}/power/state", "OFF")
