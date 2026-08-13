@@ -235,7 +235,7 @@ class Poller:
         self._last[topic] = value
 
     async def _publish_discovery(self) -> None:
-        """Emit HA discovery payloads for all 10 entities (retained)."""
+        """Emit HA discovery payloads for every entity (retained)."""
         if not self.settings.ha_discovery_enabled:
             return
 
@@ -341,4 +341,4 @@ class Poller:
         )
         await self.mqtt.publish(topic, payload, retain=True)
 
-        log.info("ha_discovery_published", device_id=device_id, entities=13)
+        log.info("ha_discovery_published", device_id=device_id, entities=14)
