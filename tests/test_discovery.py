@@ -38,6 +38,13 @@ def test_two_instances_do_not_collide():
     assert gp["unique_id"] != bp["unique_id"]
 
 
+def test_device_block_model_is_overridable():
+    from app.discovery import device_block
+
+    blk = device_block("garage_hdmi_multiviewer", "Garage HDMI Multiviewer", model="HDS-401MV")
+    assert blk["model"] == "HDS-401MV"
+
+
 def test_input_source_select_payload():
     from app.discovery import input_source_select_payload
     topic, payload = input_source_select_payload(

@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Stable device id used in unique_id + HA device card. Default keeps
     # entity_ids predictable across reinstalls.
     ha_device_id: str = "hdmi_multiviewer"
+    # HA device card `model`. Default matches the basement unit; the garage
+    # instance overrides this to report its own hardware model.
+    ha_device_model: str = "UHD-401MV 4-port HDMI Multiviewer"
 
     # --- Server settings ---
     server_host: str = "0.0.0.0"  # noqa: S104

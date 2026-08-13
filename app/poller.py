@@ -250,6 +250,7 @@ class Poller:
             "device_id": device_id,
             "device_name": device_name,
             "availability_topic": availability_topic,
+            "model": self.settings.ha_device_model,
         }
 
         # switch.multiviewer_power
