@@ -24,9 +24,7 @@ PIP_POSITIONS = ["Top Left", "Bottom Left", "Top Right", "Bottom Right"]
 PIP_SIZES = ["Small", "Medium", "Large"]
 
 
-def device_block(
-    device_id: str, device_name: str, model: str = DEVICE_MODEL
-) -> dict[str, Any]:
+def device_block(device_id: str, device_name: str, model: str = DEVICE_MODEL) -> dict[str, Any]:
     """The `device` field repeated on every entity payload — pins them
     all to one HA device card."""
     return {

@@ -85,9 +85,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             availability_topic=f"{settings.mqtt_topic_prefix.strip('/')}/bridge/available",
         )
         poller = Poller(serial=serial_handler, mqtt=mqtt, settings=settings)
-        controller = Controller(
-            serial=serial_handler, mqtt=mqtt, poller=poller, settings=settings
-        )
+        controller = Controller(serial=serial_handler, mqtt=mqtt, poller=poller, settings=settings)
 
         mqtt_ctx = mqtt.session()
         await mqtt_ctx.__aenter__()
@@ -121,9 +119,7 @@ _PIP_POSITION_SET_RE = re.compile(r"^[^/]+/pip/position/set$")
 _PIP_SIZE_SET_RE = re.compile(r"^[^/]+/pip/size/set$")
 
 
-async def _command_subscriber(
-    mqtt: MqttClient, controller: Controller, topic_prefix: str
-) -> None:
+async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_prefix: str) -> None:
     """Subscribe to every command topic and route to the Controller."""
     prefix = topic_prefix.strip("/")
     # Subscribe to the per-category wildcards. Order doesn't matter; the

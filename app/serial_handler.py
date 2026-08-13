@@ -120,14 +120,14 @@ class SerialHandler:
             return False
 
         try:
-            serial_kwargs = dict(
-                baudrate=self.baud_rate,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-                timeout=self.timeout,
-                write_timeout=self.timeout,
-            )
+            serial_kwargs = {
+                "baudrate": self.baud_rate,
+                "bytesize": serial.EIGHTBITS,
+                "parity": serial.PARITY_NONE,
+                "stopbits": serial.STOPBITS_ONE,
+                "timeout": self.timeout,
+                "write_timeout": self.timeout,
+            }
             if self._is_url:
                 # serial_for_url handles socket://host:port (and rfc2217://, etc.)
                 self._serial = serial.serial_for_url(self.port, **serial_kwargs)

@@ -164,21 +164,15 @@ class Poller:
             cmd = Commands.GET_WINDOW_INPUT.format(x=n)
             window_in = await self._read(cmd, ResponseParser.parse_window_input)
             if window_in is not None:
-                await self._publish_delta(
-                    f"{prefix}/windows/{n}/state", f"HDMI {window_in}"
-                )
+                await self._publish_delta(f"{prefix}/windows/{n}/state", f"HDMI {window_in}")
 
         # Single-screen input source (drives single mode; s in source)
-        in_src = await self._read(
-            Commands.GET_INPUT_SOURCE, ResponseParser.parse_input_source
-        )
+        in_src = await self._read(Commands.GET_INPUT_SOURCE, ResponseParser.parse_input_source)
         if in_src is not None:
             await self._publish_delta(f"{prefix}/input/source/state", f"HDMI {in_src}")
 
         # Audio source / volume / mute
-        audio_src = await self._read(
-            Commands.GET_AUDIO_SOURCE, ResponseParser.parse_audio_source
-        )
+        audio_src = await self._read(Commands.GET_AUDIO_SOURCE, ResponseParser.parse_audio_source)
         if audio_src is not None:
             name = _AUDIO_SOURCE_CODE_TO_NAME.get(audio_src, f"HDMI {audio_src}")
             await self._publish_delta(f"{prefix}/audio/source/state", name)
@@ -189,14 +183,10 @@ class Poller:
 
         muted = await self._read(Commands.GET_AUDIO_MUTE, ResponseParser.parse_mute)
         if muted is not None:
-            await self._publish_delta(
-                f"{prefix}/audio/muted/state", "ON" if muted else "OFF"
-            )
+            await self._publish_delta(f"{prefix}/audio/muted/state", "ON" if muted else "OFF")
 
         # PIP position + size
-        pip_pos = await self._read(
-            Commands.GET_PIP_POSITION, ResponseParser.parse_pip_position
-        )
+        pip_pos = await self._read(Commands.GET_PIP_POSITION, ResponseParser.parse_pip_position)
         if pip_pos is not None:
             name = _PIP_POSITION_TO_NAME.get(pip_pos)
             if name:
@@ -209,9 +199,7 @@ class Poller:
                 await self._publish_delta(f"{prefix}/pip/size/state", name)
 
         # Resolution
-        res = await self._read(
-            Commands.GET_OUTPUT_RES, ResponseParser.parse_resolution
-        )
+        res = await self._read(Commands.GET_OUTPUT_RES, ResponseParser.parse_resolution)
         if res is not None:
             await self._publish_delta(f"{prefix}/output/resolution/state", res)
 
