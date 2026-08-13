@@ -188,15 +188,15 @@ class Poller:
         # PIP position + size
         pip_pos = await self._read(Commands.GET_PIP_POSITION, ResponseParser.parse_pip_position)
         if pip_pos is not None:
-            name = _PIP_POSITION_TO_NAME.get(pip_pos)
-            if name:
-                await self._publish_delta(f"{prefix}/pip/position/state", name)
+            pos_name = _PIP_POSITION_TO_NAME.get(pip_pos)
+            if pos_name:
+                await self._publish_delta(f"{prefix}/pip/position/state", pos_name)
 
         pip_sz = await self._read(Commands.GET_PIP_SIZE, ResponseParser.parse_pip_size)
         if pip_sz is not None:
-            name = _PIP_SIZE_TO_NAME.get(pip_sz)
-            if name:
-                await self._publish_delta(f"{prefix}/pip/size/state", name)
+            size_name = _PIP_SIZE_TO_NAME.get(pip_sz)
+            if size_name:
+                await self._publish_delta(f"{prefix}/pip/size/state", size_name)
 
         # Resolution
         res = await self._read(Commands.GET_OUTPUT_RES, ResponseParser.parse_resolution)
