@@ -24,14 +24,14 @@ PIP_POSITIONS = ["Top Left", "Bottom Left", "Top Right", "Bottom Right"]
 PIP_SIZES = ["Small", "Medium", "Large"]
 
 
-def device_block(device_id: str, device_name: str) -> dict[str, Any]:
+def device_block(device_id: str, device_name: str, model: str = DEVICE_MODEL) -> dict[str, Any]:
     """The `device` field repeated on every entity payload — pins them
     all to one HA device card."""
     return {
         "identifiers": [device_id],
         "name": device_name,
         "manufacturer": DEVICE_MANUFACTURER,
-        "model": DEVICE_MODEL,
+        "model": model,
     }
 
 
@@ -43,6 +43,7 @@ def _base_payload(
     availability_topic: str,
     device_id: str,
     device_name: str,
+    model: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
@@ -53,7 +54,7 @@ def _base_payload(
         "availability_topic": availability_topic,
         "payload_available": "online",
         "payload_not_available": "offline",
-        "device": device_block(device_id, device_name),
+        "device": device_block(device_id, device_name, model or DEVICE_MODEL),
     }
     if extra:
         payload.update(extra)
@@ -68,6 +69,7 @@ def power_switch_payload(
     state_topic: str,
     command_topic: str,
     availability_topic: str,
+    model: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """`switch.multiviewer_power` — replaces the legacy template switch."""
     object_id = "multiviewer_power"
@@ -79,6 +81,7 @@ def power_switch_payload(
         availability_topic=availability_topic,
         device_id=device_id,
         device_name=device_name,
+        model=model,
         extra={
             "command_topic": command_topic,
             "payload_on": "ON",
@@ -97,6 +100,7 @@ def connected_binary_sensor_payload(
     device_name: str,
     state_topic: str,
     availability_topic: str,
+    model: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """`binary_sensor.multiviewer_connected` — serial reachability."""
     object_id = "multiviewer_connected"
@@ -108,6 +112,7 @@ def connected_binary_sensor_payload(
         availability_topic=availability_topic,
         device_id=device_id,
         device_name=device_name,
+        model=model,
         extra={
             "device_class": "connectivity",
             "payload_on": "ON",
@@ -129,6 +134,7 @@ def _select_payload(
     state_topic: str,
     command_topic: str,
     availability_topic: str,
+    model: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     topic = f"{discovery_prefix}/select/{device_id}/{object_id}/config"
     payload = _base_payload(
@@ -138,6 +144,7 @@ def _select_payload(
         availability_topic=availability_topic,
         device_id=device_id,
         device_name=device_name,
+        model=model,
         extra={
             "command_topic": command_topic,
             "options": options,
@@ -165,6 +172,18 @@ def window_select_payload(window_n: int, **kw: Any) -> tuple[str, dict[str, Any]
         object_id=f"multiviewer_window_{window_n}_input",
         name=f"Window {window_n} Input",
         icon="mdi:monitor-screenshot",
+        options=WINDOW_INPUTS,
+        **kw,
+    )
+
+
+def input_source_select_payload(**kw: Any) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_input_source` — single-screen source, HDMI 1..4.
+    Distinct from the window inputs: single mode is driven by `s in source`."""
+    return _select_payload(
+        object_id="multiviewer_input_source",
+        name="Single-Screen Input",
+        icon="mdi:import",
         options=WINDOW_INPUTS,
         **kw,
     )
@@ -211,6 +230,7 @@ def volume_number_payload(
     state_topic: str,
     command_topic: str,
     availability_topic: str,
+    model: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """`number.multiviewer_volume` — 0..100 step 5."""
     object_id = "multiviewer_volume"
@@ -222,6 +242,7 @@ def volume_number_payload(
         availability_topic=availability_topic,
         device_id=device_id,
         device_name=device_name,
+        model=model,
         extra={
             "command_topic": command_topic,
             "min": 0,
@@ -244,6 +265,7 @@ def mute_switch_payload(
     state_topic: str,
     command_topic: str,
     availability_topic: str,
+    model: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """`switch.multiviewer_muted` — writable. Today this is a read-only
     binary_sensor; promoting to a switch unlocks toggle UX in HA."""
@@ -256,6 +278,7 @@ def mute_switch_payload(
         availability_topic=availability_topic,
         device_id=device_id,
         device_name=device_name,
+        model=model,
         extra={
             "command_topic": command_topic,
             "payload_on": "ON",
@@ -274,6 +297,7 @@ def resolution_sensor_payload(
     device_name: str,
     state_topic: str,
     availability_topic: str,
+    model: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """`sensor.multiviewer_resolution` — read-only output resolution."""
     object_id = "multiviewer_resolution"
@@ -285,6 +309,7 @@ def resolution_sensor_payload(
         availability_topic=availability_topic,
         device_id=device_id,
         device_name=device_name,
+        model=model,
         extra={
             "icon": "mdi:monitor-shimmer",
         },

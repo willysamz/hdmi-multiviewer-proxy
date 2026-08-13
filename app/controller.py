@@ -107,12 +107,19 @@ class Controller:
             raise ControllerError(f"invalid window number: {window_n}")
         hdmi = _WINDOW_INPUT_MAP.get(payload.strip().lower())
         if hdmi is None:
-            raise ControllerError(
-                f"invalid window input: {payload!r} (expected HDMI 1..4)"
-            )
+            raise ControllerError(f"invalid window input: {payload!r} (expected HDMI 1..4)")
         await self._send(
             Commands.SET_WINDOW_INPUT.format(x=window_n, y=int(hdmi)),
             f"set window={window_n} input={payload}",
+        )
+
+    async def set_input_source(self, payload: str) -> None:
+        hdmi = _WINDOW_INPUT_MAP.get(payload.strip().lower())
+        if hdmi is None:
+            raise ControllerError(f"invalid input source: {payload!r} (expected HDMI 1..4)")
+        await self._send(
+            Commands.SET_INPUT_SOURCE.format(x=int(hdmi)),
+            f"set input_source={payload}",
         )
 
     async def set_audio_source(self, payload: str) -> None:
@@ -155,9 +162,7 @@ class Controller:
     async def set_pip_size(self, payload: str) -> None:
         sz = _PIP_SIZE_MAP.get(payload.strip().lower())
         if sz is None:
-            raise ControllerError(
-                f"invalid PIP size: {payload!r} (expected Small/Medium/Large)"
-            )
+            raise ControllerError(f"invalid PIP size: {payload!r} (expected Small/Medium/Large)")
         await self._send(Commands.SET_PIP_SIZE.format(x=int(sz)), f"set pip_size={payload}")
 
     # ---- low-level helpers ----

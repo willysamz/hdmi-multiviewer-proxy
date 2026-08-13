@@ -36,3 +36,26 @@ def test_two_instances_do_not_collide():
     bt, bp = _power("hdmi_multiviewer", "HDMI Multiviewer")
     assert gt != bt
     assert gp["unique_id"] != bp["unique_id"]
+
+
+def test_device_block_model_is_overridable():
+    from app.discovery import device_block
+
+    blk = device_block("garage_hdmi_multiviewer", "Garage HDMI Multiviewer", model="HDS-401MV")
+    assert blk["model"] == "HDS-401MV"
+
+
+def test_input_source_select_payload():
+    from app.discovery import input_source_select_payload
+    topic, payload = input_source_select_payload(
+        discovery_prefix="homeassistant",
+        device_id="garage_hdmi_multiviewer",
+        device_name="Garage HDMI Multiviewer",
+        state_topic="mv/input/source/state",
+        command_topic="mv/input/source/set",
+        availability_topic="mv/availability",
+    )
+    assert topic == "homeassistant/select/garage_hdmi_multiviewer/multiviewer_input_source/config"
+    assert payload["object_id"] == "multiviewer_input_source"
+    assert payload["options"] == ["HDMI 1", "HDMI 2", "HDMI 3", "HDMI 4"]
+    assert payload["command_topic"] == "mv/input/source/set"

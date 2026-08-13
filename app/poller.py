@@ -21,6 +21,7 @@ from app.commands import (
 from app.discovery import (
     audio_source_select_payload,
     connected_binary_sensor_payload,
+    input_source_select_payload,
     mode_select_payload,
     mute_switch_payload,
     pip_position_select_payload,
@@ -134,11 +135,20 @@ class Poller:
         connected = self.serial.state == ConnectionState.ON
         await self._publish_delta(f"{prefix}/connected/state", "ON" if connected else "OFF")
 
-        # Power: derive from the same state ("ON" or "OFF").
-        if self.serial.state == ConnectionState.ON:
-            await self._publish_delta(f"{prefix}/power/state", "ON")
-        elif self.serial.state == ConnectionState.OFF:
-            await self._publish_delta(f"{prefix}/power/state", "OFF")
+        # Power: prefer the device's own r power! answer whenever the transport
+        # is open; fall back to OFF only when the read fails / port is down.
+        # Gated on the LIVE transport status (is_connected), not the cached
+        # `state` (which only updates at connect + the 30s heartbeat and would
+        # otherwise republish a stale value for up to 30s).
+        power = None
+        if self.serial.is_connected:
+            power = await self._read(Commands.GET_POWER, ResponseParser.parse_power)
+        if power is None:
+            await self._publish_delta(
+                f"{prefix}/power/state", "ON" if self.serial.is_connected else "OFF"
+            )
+        else:
+            await self._publish_delta(f"{prefix}/power/state", "ON" if power else "OFF")
 
         # The remaining queries only work when the device is powered ON.
         if not connected:
@@ -154,14 +164,15 @@ class Poller:
             cmd = Commands.GET_WINDOW_INPUT.format(x=n)
             window_in = await self._read(cmd, ResponseParser.parse_window_input)
             if window_in is not None:
-                await self._publish_delta(
-                    f"{prefix}/windows/{n}/state", f"HDMI {window_in}"
-                )
+                await self._publish_delta(f"{prefix}/windows/{n}/state", f"HDMI {window_in}")
+
+        # Single-screen input source (drives single mode; s in source)
+        in_src = await self._read(Commands.GET_INPUT_SOURCE, ResponseParser.parse_input_source)
+        if in_src is not None:
+            await self._publish_delta(f"{prefix}/input/source/state", f"HDMI {in_src}")
 
         # Audio source / volume / mute
-        audio_src = await self._read(
-            Commands.GET_AUDIO_SOURCE, ResponseParser.parse_audio_source
-        )
+        audio_src = await self._read(Commands.GET_AUDIO_SOURCE, ResponseParser.parse_audio_source)
         if audio_src is not None:
             name = _AUDIO_SOURCE_CODE_TO_NAME.get(audio_src, f"HDMI {audio_src}")
             await self._publish_delta(f"{prefix}/audio/source/state", name)
@@ -172,29 +183,23 @@ class Poller:
 
         muted = await self._read(Commands.GET_AUDIO_MUTE, ResponseParser.parse_mute)
         if muted is not None:
-            await self._publish_delta(
-                f"{prefix}/audio/muted/state", "ON" if muted else "OFF"
-            )
+            await self._publish_delta(f"{prefix}/audio/muted/state", "ON" if muted else "OFF")
 
         # PIP position + size
-        pip_pos = await self._read(
-            Commands.GET_PIP_POSITION, ResponseParser.parse_pip_position
-        )
+        pip_pos = await self._read(Commands.GET_PIP_POSITION, ResponseParser.parse_pip_position)
         if pip_pos is not None:
-            name = _PIP_POSITION_TO_NAME.get(pip_pos)
-            if name:
-                await self._publish_delta(f"{prefix}/pip/position/state", name)
+            pos_name = _PIP_POSITION_TO_NAME.get(pip_pos)
+            if pos_name:
+                await self._publish_delta(f"{prefix}/pip/position/state", pos_name)
 
         pip_sz = await self._read(Commands.GET_PIP_SIZE, ResponseParser.parse_pip_size)
         if pip_sz is not None:
-            name = _PIP_SIZE_TO_NAME.get(pip_sz)
-            if name:
-                await self._publish_delta(f"{prefix}/pip/size/state", name)
+            size_name = _PIP_SIZE_TO_NAME.get(pip_sz)
+            if size_name:
+                await self._publish_delta(f"{prefix}/pip/size/state", size_name)
 
         # Resolution
-        res = await self._read(
-            Commands.GET_OUTPUT_RES, ResponseParser.parse_resolution
-        )
+        res = await self._read(Commands.GET_OUTPUT_RES, ResponseParser.parse_resolution)
         if res is not None:
             await self._publish_delta(f"{prefix}/output/resolution/state", res)
 
@@ -218,7 +223,7 @@ class Poller:
         self._last[topic] = value
 
     async def _publish_discovery(self) -> None:
-        """Emit HA discovery payloads for all 10 entities (retained)."""
+        """Emit HA discovery payloads for every entity (retained)."""
         if not self.settings.ha_discovery_enabled:
             return
 
@@ -233,6 +238,7 @@ class Poller:
             "device_id": device_id,
             "device_name": device_name,
             "availability_topic": availability_topic,
+            "model": self.settings.ha_device_model,
         }
 
         # switch.multiviewer_power
@@ -267,6 +273,14 @@ class Poller:
                 command_topic=f"{prefix}/windows/{n}/set",
             )
             await self.mqtt.publish(topic, payload, retain=True)
+
+        # select.multiviewer_input_source
+        topic, payload = input_source_select_payload(
+            **common,
+            state_topic=f"{prefix}/input/source/state",
+            command_topic=f"{prefix}/input/source/set",
+        )
+        await self.mqtt.publish(topic, payload, retain=True)
 
         # select.multiviewer_audio_source
         topic, payload = audio_source_select_payload(
@@ -315,4 +329,4 @@ class Poller:
         )
         await self.mqtt.publish(topic, payload, retain=True)
 
-        log.info("ha_discovery_published", device_id=device_id, entities=12)
+        log.info("ha_discovery_published", device_id=device_id, entities=14)
