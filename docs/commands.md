@@ -34,6 +34,27 @@ was the original source and proved **out of date** — see below.
     Run `POST /api/raw {"command":"help!"}` against a unit before trusting any
     document, this one included.
 
+!!! warning "`help!` reports the ACCEPT range, not the number of distinct values"
+
+    Enumerated on hardware 2026-08-28 by setting each index and reading it back:
+
+    | command | `help!` | distinct values | the extra slots |
+    |---|---|---|---|
+    | `s output res x!` | 1~15 | **15** | 15 = `AUTO` (inferred) |
+    | `s input EDID x!` | 1~19 | **19** | 19 = `USER1` (confirmed) |
+    | `s quad mode x!` | 1~3 | **2** | 3 reads back as `quad mode 2` |
+    | `s PIP position x!` | 1~5 | **4** | 5 reads back as `right bottom` (= 4) |
+    | `s PIP size x!` | 1~4 | **3** | 4 reads back as `large` (= 3) |
+
+    Three of those five slots are aliases that clamp to the last real value.
+    Trusting `help!`'s ranges alone would have shipped three controls that
+    silently do nothing — the same class of error as trusting the manual, just
+    from a better source. **Only set-and-read-back settles it.**
+
+    Response wording also differs per model. Border colour is
+    `window 1 border color yellow` on the HDS but `window 1 border color:` —
+    colon, empty when unset — on the UHD.
+
 ## Protocol
 
 | | |
