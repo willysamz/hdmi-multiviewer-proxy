@@ -8,8 +8,31 @@ The two devices are **not** command-compatible. Check the
 on both — that assumption caused a production regression (see
 [Why this matters](#why-this-matters)).
 
-**Sources.** UHD-401MV: vendor manual, RS-232 Command section. HDS-401MV:
-`help!` sent to a live device, which returns all 46 commands it supports.
+**Sources.** Both from the devices' own `help!` output. The UHD's vendor manual
+was the original source and proved **out of date** — see below.
+
+!!! danger "The UHD manual disagrees with its firmware in nine places"
+
+    `help!` on MCU **1.10.03**. Where they differ, the **firmware is right**:
+
+    | command | manual | firmware |
+    |---|---|---|
+    | `s output res x!` | 1~14 | **1~15** |
+    | `s input EDID x!` | 1~18 | **1~19** |
+    | `s PIP position x!` | 1~4 | **1~5** |
+    | `s PIP size x!` | 1~3 | **1~4** |
+    | `s quad mode x!` | 1~2 | **1~3** |
+    | `s window x border color y!` | absent | **present** (x=1~4, y=1~9) |
+    | `s window x border y!` | absent | **present** (per window) |
+    | `s window source osd x!` | absent | **present** |
+    | `s edid user1 …!` | absent | **present** (custom EDID upload) |
+
+    Three of those were wrongly modelled as HDS-only purely because the UHD
+    manual omits them. And the border command is **not shared**: the UHD sets
+    it per window, the HDS globally.
+
+    Run `POST /api/raw {"command":"help!"}` against a unit before trusting any
+    document, this one included.
 
 ## Protocol
 

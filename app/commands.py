@@ -405,6 +405,21 @@ class ResponseParser:
         return None
 
     @staticmethod
+    def parse_window_borders(response: str) -> dict[int, bool]:
+        """Parse per-window border state from `r window 0 border!` (UHD).
+
+        NOT YET VERIFIED against hardware: the UHD's response format for this
+        command has not been captured, so the shape here is modelled on the
+        border-colour reply (`window N border color X`) which IS verified. If
+        the device words it differently this returns {} and the switches simply
+        report no state -- it cannot produce a wrong value.
+        """
+        out: dict[int, bool] = {}
+        for m in re.finditer(r"window\s+(\d)\s+border\s+(on|off)\b", response, re.IGNORECASE):
+            out[int(m.group(1))] = m.group(2).lower() == "on"
+        return out
+
+    @staticmethod
     def parse_border_colors(response: str) -> dict[int, str]:
         """Parse one or more `window N border color <name>` lines.
 

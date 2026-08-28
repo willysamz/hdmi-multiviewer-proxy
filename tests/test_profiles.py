@@ -149,9 +149,10 @@ def test_auto_switch_response_parsing():
 # --- EDID (string rendering only -- never sent to a device) -----------------
 
 
-def test_edid_option_counts_differ_per_model():
-    # UHD manual lists 18 modes; the HDS `help!` gives x=1~7 with no labels.
-    assert len(UHD_401MV.edid_options) == 18
+def test_edid_option_counts_come_from_firmware_not_the_manual():
+    # The UHD manual lists 18 EDID modes; its firmware `help!` reports x=1~19.
+    # Firmware wins -- an option the list omits is unreachable over MQTT.
+    assert len(UHD_401MV.edid_options) == 19
     assert len(HDS_401MV.edid_options) == 7
 
 
@@ -275,13 +276,36 @@ async def test_border_colour_renders_the_device_index():
 
 
 @pytest.mark.asyncio
-async def test_uhd_refuses_border_commands():
-    c, serial = _controller("uhd401mv")
-    with pytest.raises(ControllerError, match="no border-colour command"):
-        await c.set_border_color(1, "red")
-    with pytest.raises(ControllerError, match="no window-border command"):
-        await c.set_window_border("ON")
-    serial.send_command.assert_not_awaited()
+async def test_border_scope_differs_between_models():
+    """Both models have borders; the COMMANDS are not the same.
+
+    UHD: `s window x border y!` per window. HDS: `s window border y!` global.
+    Modelling them as one command was the original error -- it came from the
+    UHD manual, which omits the command entirely.
+    """
+    c_uhd, s_uhd = _controller("uhd401mv")
+    await c_uhd.set_window_border_for(2, "ON")
+    s_uhd.send_command.assert_awaited_once_with("s window 2 border 1!")
+    with pytest.raises(ControllerError, match="per window"):
+        await c_uhd.set_window_border("ON")
+
+    c_hds, s_hds = _controller("hds401mv")
+    await c_hds.set_window_border("OFF")
+    s_hds.send_command.assert_awaited_once_with("s window border 0!")
+    with pytest.raises(ControllerError, match="globally, not per window"):
+        await c_hds.set_window_border_for(1, "ON")
+
+
+def test_uhd_firmware_ranges_beat_its_manual():
+    """Five option lists were one short because they came from the manual."""
+    assert len(UHD_401MV.resolution_options) == 15  # manual: 14
+    assert len(UHD_401MV.edid_options) == 19  # manual: 18
+    assert len(UHD_401MV.pip_position_options) == 5  # manual: 4
+    assert len(UHD_401MV.pip_size_options) == 4  # manual: 3
+    assert len(UHD_401MV.quad_mode_options) == 3  # manual: 2
+    # The HDS keeps its smaller, help!-derived ranges.
+    assert len(HDS_401MV.pip_position_options) == 4
+    assert len(HDS_401MV.quad_mode_options) == 2
 
 
 @pytest.mark.asyncio
@@ -371,10 +395,15 @@ async def test_discovery_entity_sets_differ_per_model():
     assert has(uhd, "multiviewer_hdcp") and not has(hds, "multiviewer_hdcp")
     assert has(uhd, "multiviewer_output_resolution")
     assert not has(hds, "multiviewer_output_resolution")  # no labelled options
-    # HDS-only
-    assert has(hds, "multiviewer_window_border") and not has(uhd, "multiviewer_window_border")
-    assert has(hds, "window_1_border_color") and not has(uhd, "window_1_border_color")
-    assert has(hds, "multiviewer_source_osd") and not has(uhd, "multiviewer_source_osd")
+    # Borders and OSD exist on BOTH -- absent from the UHD manual, present in
+    # its firmware. Only the border SHAPE differs.
+    for topics in (uhd, hds):
+        assert has(topics, "window_1_border_color")
+        assert has(topics, "multiviewer_source_osd")
+    assert has(hds, "multiviewer_window_border")  # HDS: one global switch
+    assert not has(uhd, "multiviewer_window_border")
+    assert has(uhd, "multiviewer_window_1_border")  # UHD: one per window
+    assert has(uhd, "multiviewer_window_4_border")
     # shared
     for topics in (uhd, hds):
         assert has(topics, "multiviewer_quad_aspect")

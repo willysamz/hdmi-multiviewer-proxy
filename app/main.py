@@ -134,6 +134,7 @@ _VKA_SET_RE = re.compile(r"^[^/]+/output/vka/set$")
 _VIDEO_MODE_SET_RE = re.compile(r"^[^/]+/output/video_mode/set$")
 _LAYOUT_SET_RE = re.compile(r"^[^/]+/(?P<layout>quad|pbp|triple)/(?P<kind>mode|aspect)/set$")
 _WINDOW_BORDER_SET_RE = re.compile(r"^[^/]+/window/border/set$")
+_WINDOW_BORDER_N_SET_RE = re.compile(r"^[^/]+/window/(?P<n>[1-4])/border/set$")
 _BORDER_COLOR_SET_RE = re.compile(r"^[^/]+/window/(?P<n>[1-4])/border_color/set$")
 _SOURCE_OSD_SET_RE = re.compile(r"^[^/]+/window/source_osd/set$")
 _REBOOT_SET_RE = re.compile(r"^[^/]+/reboot/set$")
@@ -180,6 +181,7 @@ async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_pr
     if controller.profile.supports(CAP_WINDOW_BORDER):
         await mqtt.subscribe(f"{prefix}/window/border/set")
         await mqtt.subscribe(f"{prefix}/window/+/border_color/set")
+        await mqtt.subscribe(f"{prefix}/window/+/border/set")
     if controller.profile.supports(CAP_SOURCE_OSD):
         await mqtt.subscribe(f"{prefix}/window/source_osd/set")
     log.info("command_subscriber_started", prefix=prefix)
@@ -234,6 +236,8 @@ async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_pr
                 await getattr(controller, f"set_{m.group('layout')}_{m.group('kind')}")(payload)
             elif _WINDOW_BORDER_SET_RE.match(topic_str):
                 await controller.set_window_border(payload.upper())
+            elif (m := _WINDOW_BORDER_N_SET_RE.match(topic_str)) is not None:
+                await controller.set_window_border_for(int(m.group("n")), payload.upper())
             elif (m := _BORDER_COLOR_SET_RE.match(topic_str)) is not None:
                 await controller.set_border_color(int(m.group("n")), payload)
             elif _SOURCE_OSD_SET_RE.match(topic_str):

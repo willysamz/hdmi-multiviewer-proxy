@@ -202,24 +202,32 @@ def audio_source_select_payload(**kw: Any) -> tuple[str, dict[str, Any]]:
     )
 
 
-def pip_position_select_payload(**kw: Any) -> tuple[str, dict[str, Any]]:
-    """`select.multiviewer_pip_position` — TL/TR/BL/BR."""
+def pip_position_select_payload(
+    *, options: list[str] | None = None, **kw: Any
+) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_pip_position`.
+
+    Options are profile-supplied: UHD firmware accepts a fifth position its
+    manual never documented.
+    """
     return _select_payload(
         object_id="multiviewer_pip_position",
         name="PIP Position",
         icon="mdi:picture-in-picture-top-right",
-        options=PIP_POSITIONS,
+        options=options or list(PIP_POSITIONS),
         **kw,
     )
 
 
-def pip_size_select_payload(**kw: Any) -> tuple[str, dict[str, Any]]:
-    """`select.multiviewer_pip_size` — Small/Medium/Large."""
+def pip_size_select_payload(
+    *, options: list[str] | None = None, **kw: Any
+) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_pip_size`. Options profile-supplied (UHD has a 4th)."""
     return _select_payload(
         object_id="multiviewer_pip_size",
         name="PIP Size",
         icon="mdi:resize",
-        options=PIP_SIZES,
+        options=options or list(PIP_SIZES),
         **kw,
     )
 
@@ -631,5 +639,43 @@ def edid_sensor_payload(
         device_name=device_name,
         model=model,
         extra={"icon": "mdi:high-definition-box", "entity_category": "diagnostic"},
+    )
+    return topic, payload
+
+
+def window_border_per_window_switch_payload(
+    window_n: int,
+    *,
+    discovery_prefix: str,
+    device_id: str,
+    device_name: str,
+    state_topic: str,
+    command_topic: str,
+    availability_topic: str,
+    model: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """`switch.multiviewer_window_{n}_border` — UHD only.
+
+    The UHD sets borders per window (`s window x border y!`); the HDS has a
+    single global switch and a different command. Same feature, different
+    shape, so they get different entities rather than a forced shared one.
+    """
+    object_id = f"multiviewer_window_{window_n}_border"
+    topic = f"{discovery_prefix}/switch/{device_id}/{object_id}/config"
+    payload = _base_payload(
+        object_id=object_id,
+        name=f"Multiviewer Window {window_n} Border",
+        state_topic=state_topic,
+        availability_topic=availability_topic,
+        device_id=device_id,
+        device_name=device_name,
+        model=model,
+        extra={
+            "command_topic": command_topic,
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "icon": "mdi:border-all-variant",
+            "optimistic": False,
+        },
     )
     return topic, payload
