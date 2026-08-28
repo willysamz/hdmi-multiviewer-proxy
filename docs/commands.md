@@ -1,5 +1,11 @@
 # UHD-401MV RS-232 Command Reference
 
+> **This file documents the UHD-401MV.** The proxy also drives the HDS-401MV,
+> and the two are **not** command-compatible — see
+> [Device profiles](#device-profiles) below before assuming a command here
+> works on both.
+
+
 Serial port settings: **115200 baud, 8 data bits, 1 stop bit, no parity**
 
 Command format: `command!` (terminated with `!`)
@@ -196,3 +202,39 @@ Parameters: `x` = Parameter 1, `y` = Parameter 2
 | `r quad mode!` | Get quad mode | - | `quad mode 1` |
 | `s quad aspect x!` | Set quad aspect | 1=full, 2=16:9 | `quad aspect: full screen` |
 | `r quad aspect!` | Get quad aspect | - | `quad aspect: full screen` |
+
+---
+
+## Device profiles
+
+`DEVICE_PROFILE` (chart value `deviceProfile`) selects which model this
+instance drives: `uhd401mv` or `hds401mv`. It cannot be auto-detected —
+`r type!` returns `4x1 HDMI Multiviewer` on **both**.
+
+Sources: the UHD manual, and `help!` sent to a live HDS (46 commands).
+
+| | UHD-401MV | HDS-401MV |
+|---|---|---|
+| power | `power z!` | `s power z!` |
+| reboot | `reboot!` | `s reboot!` |
+| reset | `reset!` | `s reset!` |
+| input EDID | `s input EDID x!`, x=1~18 | `s input edid x!`, x=1~7 |
+| output res range | x=1~14 | x=1~4 |
+| audio volume (`vol`, `vol+`, `vol-`) | yes | **no such command** |
+| output HDCP / VKA / ITC | yes | **no such command** |
+| `r status!` | no | yes |
+| window border / border colour | no | yes |
+| window source OSD | no | yes |
+| auto switch | yes | yes |
+| multiview, windows, in source, PIP/PBP/triple/quad | identical | identical |
+
+### Why this matters
+
+Release **0.3.4** changed power to `s power z!`. That is correct for the HDS
+and made its power switch work for the first time. Applied to a UHD it
+**breaks** power control entirely — the unit silently ignores the command,
+with no error and no state change. It was reverted after ~14 hours.
+
+Capabilities gate polling and HA discovery, not just commands. Querying a
+command a model lacks returns `E00` every cycle, and publishing an entity for
+it leaves a control in HA that can never work.

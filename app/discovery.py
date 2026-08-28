@@ -315,3 +315,83 @@ def resolution_sensor_payload(
         },
     )
     return topic, payload
+
+
+def auto_switch_switch_payload(
+    *,
+    discovery_prefix: str,
+    device_id: str,
+    device_name: str,
+    state_topic: str,
+    command_topic: str,
+    availability_topic: str,
+    model: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """`switch.multiviewer_auto_switch` — automatic input failover.
+
+    When on, the device jumps to the next live input if the current source
+    drops. That competes with scenes/scripts that set an input explicitly, so
+    being able to see and disable it matters more than being able to enable it.
+    """
+    object_id = "multiviewer_auto_switch"
+    topic = f"{discovery_prefix}/switch/{device_id}/{object_id}/config"
+    payload = _base_payload(
+        object_id=object_id,
+        name="Multiviewer Auto Switch",
+        state_topic=state_topic,
+        availability_topic=availability_topic,
+        device_id=device_id,
+        device_name=device_name,
+        model=model,
+        extra={
+            "command_topic": command_topic,
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "icon": "mdi:swap-horizontal-bold",
+            "optimistic": False,
+            "entity_category": "config",
+        },
+    )
+    return topic, payload
+
+
+def edid_select_payload(
+    *,
+    options: list[str],
+    discovery_prefix: str,
+    device_id: str,
+    device_name: str,
+    state_topic: str,
+    command_topic: str,
+    availability_topic: str,
+    model: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_edid` — the EDID presented to all four inputs.
+
+    Options are profile-supplied: the models expose different mode counts
+    (UHD 18, HDS 7) and their labels are not interchangeable.
+
+    Marked `entity_category: config` so it lands in HA's configuration block
+    rather than on the main card. Changing it renegotiates HDMI for every
+    source and can black the display or drop audio, so it should not sit
+    somewhere it can be brushed by accident.
+    """
+    object_id = "multiviewer_edid"
+    topic = f"{discovery_prefix}/select/{device_id}/{object_id}/config"
+    payload = _base_payload(
+        object_id=object_id,
+        name="Multiviewer EDID",
+        state_topic=state_topic,
+        availability_topic=availability_topic,
+        device_id=device_id,
+        device_name=device_name,
+        model=model,
+        extra={
+            "command_topic": command_topic,
+            "options": options,
+            "icon": "mdi:high-definition-box",
+            "optimistic": False,
+            "entity_category": "config",
+        },
+    )
+    return topic, payload

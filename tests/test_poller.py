@@ -14,6 +14,7 @@ def _poller():
     settings.mqtt_topic_prefix = "mv"
     settings.ha_discovery_enabled = False
     settings.poll_interval = 10.0
+    settings.device_profile = "uhd401mv"
     p = Poller(serial, mqtt, settings)
     p._discovery_published = True  # skip discovery in these tests
     return p, serial, mqtt

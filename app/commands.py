@@ -365,6 +365,20 @@ class ResponseParser:
         return None
 
     @staticmethod
+    def parse_edid(response: str) -> str | None:
+        """Parse an EDID-mode response.
+
+        Both models answer `input EDID:<mode text>` (the HDS lowercases the
+        keyword), so match case-insensitively and return the text verbatim
+        rather than mapping it -- the mode lists differ per model and the HDS
+        labels are not documented anywhere we have.
+        """
+        match = re.search(r"edid\s*:\s*(.+)", response, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        return None
+
+    @staticmethod
     def parse_auto_switch(response: str) -> bool | None:
         """Parse auto switch response."""
         if "auto switch on" in response.lower():

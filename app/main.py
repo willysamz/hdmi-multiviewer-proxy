@@ -15,6 +15,7 @@ from app.controller import Controller, ControllerError
 from app.dependencies import set_serial_handler, set_startup_time
 from app.mqtt_client import MqttClient
 from app.poller import Poller
+from app.profiles import CAP_AUTO_SWITCH, CAP_EDID
 from app.routers import audio, display, health, output, system
 from app.serial_handler import SerialHandler
 
@@ -117,6 +118,8 @@ _AUDIO_VOLUME_SET_RE = re.compile(r"^[^/]+/audio/volume/set$")
 _AUDIO_MUTED_SET_RE = re.compile(r"^[^/]+/audio/muted/set$")
 _PIP_POSITION_SET_RE = re.compile(r"^[^/]+/pip/position/set$")
 _PIP_SIZE_SET_RE = re.compile(r"^[^/]+/pip/size/set$")
+_AUTO_SWITCH_SET_RE = re.compile(r"^[^/]+/auto_switch/set$")
+_EDID_SET_RE = re.compile(r"^[^/]+/edid/set$")
 
 
 async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_prefix: str) -> None:
@@ -136,6 +139,12 @@ async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_pr
         f"{prefix}/pip/size/set",
     ]:
         await mqtt.subscribe(sub)
+    # Capability-gated topics: subscribing to a command this model cannot
+    # perform would leave HA showing a control that only ever errors.
+    if controller.profile.supports(CAP_AUTO_SWITCH):
+        await mqtt.subscribe(f"{prefix}/auto_switch/set")
+    if controller.profile.supports(CAP_EDID):
+        await mqtt.subscribe(f"{prefix}/edid/set")
     log.info("command_subscriber_started", prefix=prefix)
 
     async for msg in mqtt.messages:
@@ -172,6 +181,10 @@ async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_pr
                 await controller.set_pip_position(payload)
             elif _PIP_SIZE_SET_RE.match(topic_str):
                 await controller.set_pip_size(payload)
+            elif _AUTO_SWITCH_SET_RE.match(topic_str):
+                await controller.set_auto_switch(payload.upper())
+            elif _EDID_SET_RE.match(topic_str):
+                await controller.set_edid(payload)
             else:
                 log.warning("command_subscriber_unmatched_topic", topic=topic_str)
         except ControllerError as exc:
