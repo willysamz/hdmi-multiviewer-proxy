@@ -15,12 +15,13 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from app.commands import (
-    Commands,
     ResponseParser,
 )
 from app.discovery import (
     audio_source_select_payload,
+    auto_switch_switch_payload,
     connected_binary_sensor_payload,
+    edid_select_payload,
     input_source_select_payload,
     mode_select_payload,
     mute_switch_payload,
@@ -30,6 +31,12 @@ from app.discovery import (
     resolution_sensor_payload,
     volume_number_payload,
     window_select_payload,
+)
+from app.profiles import (
+    CAP_AUTO_SWITCH,
+    CAP_EDID,
+    CAP_VOLUME,
+    get_profile,
 )
 from app.serial_handler import ConnectionState
 
@@ -77,6 +84,7 @@ class Poller:
         self.serial = serial
         self.mqtt = mqtt
         self.settings = settings
+        self.profile = get_profile(settings.device_profile)
 
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
@@ -142,7 +150,7 @@ class Poller:
         # otherwise republish a stale value for up to 30s).
         power = None
         if self.serial.is_connected:
-            power = await self._read(Commands.GET_POWER, ResponseParser.parse_power)
+            power = await self._read(self.profile.GET_POWER, ResponseParser.parse_power)
         if power is None:
             await self._publish_delta(
                 f"{prefix}/power/state", "ON" if self.serial.is_connected else "OFF"
@@ -155,51 +163,67 @@ class Poller:
             return
 
         # Mode
-        mode = await self._read(Commands.GET_MULTIVIEW, ResponseParser.parse_multiview_mode)
+        mode = await self._read(self.profile.GET_MULTIVIEW, ResponseParser.parse_multiview_mode)
         if mode is not None:
             await self._publish_delta(f"{prefix}/mode/state", mode)
 
         # Windows 1..4
         for n in range(1, 5):
-            cmd = Commands.GET_WINDOW_INPUT.format(x=n)
+            cmd = self.profile.GET_WINDOW_INPUT.format(x=n)
             window_in = await self._read(cmd, ResponseParser.parse_window_input)
             if window_in is not None:
                 await self._publish_delta(f"{prefix}/windows/{n}/state", f"HDMI {window_in}")
 
         # Single-screen input source (drives single mode; s in source)
-        in_src = await self._read(Commands.GET_INPUT_SOURCE, ResponseParser.parse_input_source)
+        in_src = await self._read(self.profile.GET_INPUT_SOURCE, ResponseParser.parse_input_source)
         if in_src is not None:
             await self._publish_delta(f"{prefix}/input/source/state", f"HDMI {in_src}")
 
         # Audio source / volume / mute
-        audio_src = await self._read(Commands.GET_AUDIO_SOURCE, ResponseParser.parse_audio_source)
+        audio_src = await self._read(
+            self.profile.GET_AUDIO_SOURCE, ResponseParser.parse_audio_source
+        )
         if audio_src is not None:
             name = _AUDIO_SOURCE_CODE_TO_NAME.get(audio_src, f"HDMI {audio_src}")
             await self._publish_delta(f"{prefix}/audio/source/state", name)
 
-        vol = await self._read(Commands.GET_AUDIO_VOL, ResponseParser.parse_volume)
+        vol = (
+            await self._read(self.profile.GET_AUDIO_VOL, ResponseParser.parse_volume)
+            if self.profile.supports(CAP_VOLUME)
+            else None
+        )
         if vol is not None:
             await self._publish_delta(f"{prefix}/audio/volume/state", str(vol))
 
-        muted = await self._read(Commands.GET_AUDIO_MUTE, ResponseParser.parse_mute)
+        muted = await self._read(self.profile.GET_AUDIO_MUTE, ResponseParser.parse_mute)
         if muted is not None:
             await self._publish_delta(f"{prefix}/audio/muted/state", "ON" if muted else "OFF")
 
         # PIP position + size
-        pip_pos = await self._read(Commands.GET_PIP_POSITION, ResponseParser.parse_pip_position)
+        pip_pos = await self._read(self.profile.GET_PIP_POSITION, ResponseParser.parse_pip_position)
         if pip_pos is not None:
             pos_name = _PIP_POSITION_TO_NAME.get(pip_pos)
             if pos_name:
                 await self._publish_delta(f"{prefix}/pip/position/state", pos_name)
 
-        pip_sz = await self._read(Commands.GET_PIP_SIZE, ResponseParser.parse_pip_size)
+        pip_sz = await self._read(self.profile.GET_PIP_SIZE, ResponseParser.parse_pip_size)
         if pip_sz is not None:
             size_name = _PIP_SIZE_TO_NAME.get(pip_sz)
             if size_name:
                 await self._publish_delta(f"{prefix}/pip/size/state", size_name)
 
         # Resolution
-        res = await self._read(Commands.GET_OUTPUT_RES, ResponseParser.parse_resolution)
+        if self.profile.supports(CAP_AUTO_SWITCH):
+            auto = await self._read(self.profile.GET_AUTO_SWITCH, ResponseParser.parse_auto_switch)
+            if auto is not None:
+                await self._publish_delta(f"{prefix}/auto_switch/state", "ON" if auto else "OFF")
+
+        if self.profile.supports(CAP_EDID):
+            edid = await self._read(self.profile.GET_INPUT_EDID, ResponseParser.parse_edid)
+            if edid is not None:
+                await self._publish_delta(f"{prefix}/edid/state", edid)
+
+        res = await self._read(self.profile.GET_OUTPUT_RES, ResponseParser.parse_resolution)
         if res is not None:
             await self._publish_delta(f"{prefix}/output/resolution/state", res)
 
@@ -241,6 +265,10 @@ class Poller:
             "model": self.settings.ha_device_model,
         }
 
+        # Counted rather than hardcoded: the entity set now varies by profile.
+        published = 0
+        retracted = 0
+
         # switch.multiviewer_power
         topic, payload = power_switch_payload(
             **common,
@@ -248,6 +276,7 @@ class Poller:
             command_topic=f"{prefix}/power/set",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
         # binary_sensor.multiviewer_connected
         topic, payload = connected_binary_sensor_payload(
@@ -255,6 +284,7 @@ class Poller:
             state_topic=f"{prefix}/connected/state",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
         # select.multiviewer_mode
         topic, payload = mode_select_payload(
@@ -263,6 +293,7 @@ class Poller:
             command_topic=f"{prefix}/mode/set",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
         # select.multiviewer_window_{1..4}_input
         for n in range(1, 5):
@@ -273,6 +304,7 @@ class Poller:
                 command_topic=f"{prefix}/windows/{n}/set",
             )
             await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
 
         # select.multiviewer_input_source
         topic, payload = input_source_select_payload(
@@ -281,6 +313,7 @@ class Poller:
             command_topic=f"{prefix}/input/source/set",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
         # select.multiviewer_audio_source
         topic, payload = audio_source_select_payload(
@@ -289,14 +322,25 @@ class Poller:
             command_topic=f"{prefix}/audio/source/set",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
-        # number.multiviewer_volume
+        # number.multiviewer_volume -- UHD only. The HDS has no volume command
+        # at all; publishing this against one produces a control that cannot
+        # work and makes the poller emit `E00` every cycle. If the capability
+        # is absent we publish an EMPTY retained payload to the same config
+        # topic, which is how HA deletes a previously-discovered entity --
+        # otherwise a phantom entity survives forever from an earlier release.
         topic, payload = volume_number_payload(
             **common,
             state_topic=f"{prefix}/audio/volume/state",
             command_topic=f"{prefix}/audio/volume/set",
         )
-        await self.mqtt.publish(topic, payload, retain=True)
+        if self.profile.supports(CAP_VOLUME):
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
+        else:
+            await self.mqtt.publish(topic, "", retain=True)
+            retracted += 1
 
         # switch.multiviewer_muted (was binary_sensor; now writable)
         topic, payload = mute_switch_payload(
@@ -305,6 +349,7 @@ class Poller:
             command_topic=f"{prefix}/audio/muted/set",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
         # select.multiviewer_pip_position
         topic, payload = pip_position_select_payload(
@@ -313,6 +358,7 @@ class Poller:
             command_topic=f"{prefix}/pip/position/set",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
         # select.multiviewer_pip_size
         topic, payload = pip_size_select_payload(
@@ -321,6 +367,29 @@ class Poller:
             command_topic=f"{prefix}/pip/size/set",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
+
+        # switch.multiviewer_auto_switch
+        if self.profile.supports(CAP_AUTO_SWITCH):
+            topic, payload = auto_switch_switch_payload(
+                **common,
+                state_topic=f"{prefix}/auto_switch/state",
+                command_topic=f"{prefix}/auto_switch/set",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
+
+        # select.multiviewer_edid -- options come from the profile; the models
+        # expose different mode counts and their labels are not interchangeable.
+        if self.profile.supports(CAP_EDID):
+            topic, payload = edid_select_payload(
+                **common,
+                options=list(self.profile.edid_options),
+                state_topic=f"{prefix}/edid/state",
+                command_topic=f"{prefix}/edid/set",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
 
         # sensor.multiviewer_resolution
         topic, payload = resolution_sensor_payload(
@@ -328,5 +397,12 @@ class Poller:
             state_topic=f"{prefix}/output/resolution/state",
         )
         await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
-        log.info("ha_discovery_published", device_id=device_id, entities=14)
+        log.info(
+            "ha_discovery_published",
+            device_id=device_id,
+            profile=self.profile.key,
+            entities=published,
+            retracted=retracted,
+        )

@@ -49,6 +49,17 @@ class Settings(BaseSettings):
     # instance overrides this to report its own hardware model.
     ha_device_model: str = "UHD-401MV 4-port HDMI Multiviewer"
 
+    # --- Device profile (v0.4+) ---
+    # Which multiviewer model this instance drives. The two supported models
+    # are NOT command-compatible -- notably the UHD takes `power z!` while the
+    # HDS takes `s power z!`, and the HDS has no volume/HDCP/VKA/ITC commands
+    # at all. `r type!` returns the same string on both, so this cannot be
+    # auto-detected and must be set per instance.
+    #
+    # BREAKING in 0.4.0: an HDS instance MUST set device_profile=hds401mv.
+    # Leaving the default sends it UHD-form power commands, which it ignores.
+    device_profile: str = "uhd401mv"
+
     # --- Server settings ---
     server_host: str = "0.0.0.0"  # noqa: S104
     server_port: int = 8080

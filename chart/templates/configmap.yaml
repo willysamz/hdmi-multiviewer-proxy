@@ -27,3 +27,8 @@ data:
   HA_DISCOVERY_PREFIX: {{ .Values.ha.discoveryPrefix | default "homeassistant" | quote }}
   HA_DEVICE_NAME: {{ .Values.ha.deviceName | default "HDMI Multiviewer" | quote }}
   HA_DEVICE_ID: {{ .Values.ha.deviceId | default "hdmi_multiviewer" | quote }}
+  # Which multiviewer model this instance drives. The supported models are NOT
+  # command-compatible (the UHD takes `power z!`, the HDS `s power z!`, and the
+  # HDS has no volume/HDCP/VKA/ITC commands at all). `r type!` returns the same
+  # string on both, so it cannot be auto-detected -- set it per instance.
+  DEVICE_PROFILE: {{ .Values.deviceProfile | default "uhd401mv" | quote }}

@@ -13,6 +13,19 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# --- Device profile (v0.4+) ---
+# Which multiviewer model this release drives: "uhd401mv" or "hds401mv".
+#
+# The two are NOT command-compatible. The UHD takes `power z!` while the HDS
+# takes `s power z!`, and the HDS has no volume / HDCP / VKA / ITC commands at
+# all -- polling those on one returns `E00` and publishing entities for them
+# creates HA controls that cannot work. `r type!` returns "4x1 HDMI
+# Multiviewer" on BOTH, so the model cannot be detected and must be declared.
+#
+# BREAKING in 0.4.0: an HDS-401MV release MUST set this to "hds401mv".
+# Leaving the default sends it UHD-form power commands, which it ignores.
+deviceProfile: "uhd401mv"
+
 # Serial port configuration
 serial:
   port: /dev/ttyUSB0
