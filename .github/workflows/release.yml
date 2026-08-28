@@ -137,6 +137,12 @@ jobs:
           name: packaged-chart
           path: .helm-packages/
           retention-days: 7
+          # `.helm-packages/` is a HIDDEN directory (leading dot) and
+          # upload-artifact excludes hidden files by default. Without this the
+          # upload silently uploads nothing, only *warns*, and the job still
+          # reports success -- the verify job then fails with "Artifact not
+          # found", which is what happened on the v0.6.3 release.
+          include-hidden-files: true
 
       - name: Upload chart to release
         uses: softprops/action-gh-release@v1
