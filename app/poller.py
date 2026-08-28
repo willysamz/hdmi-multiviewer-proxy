@@ -39,6 +39,7 @@ from app.discovery import (
     video_mode_select_payload,
     vka_select_payload,
     volume_number_payload,
+    window_border_per_window_switch_payload,
     window_border_switch_payload,
     window_select_payload,
 )
@@ -464,6 +465,7 @@ class Poller:
         # select.multiviewer_pip_position
         topic, payload = pip_position_select_payload(
             **common,
+            options=list(self.profile.pip_position_options),
             state_topic=f"{prefix}/pip/position/state",
             command_topic=f"{prefix}/pip/position/set",
         )
@@ -473,6 +475,7 @@ class Poller:
         # select.multiviewer_pip_size
         topic, payload = pip_size_select_payload(
             **common,
+            options=list(self.profile.pip_size_options),
             state_topic=f"{prefix}/pip/size/state",
             command_topic=f"{prefix}/pip/size/set",
         )
@@ -544,7 +547,13 @@ class Poller:
             published += 1
 
         for layout in ("quad", "pbp", "triple"):
-            for kind, opts in (("mode", LAYOUT_MODE_OPTIONS), ("aspect", ASPECT_OPTIONS)):
+            for kind, opts in (
+                (
+                    "mode",
+                    self.profile.quad_mode_options if layout == "quad" else LAYOUT_MODE_OPTIONS,
+                ),
+                ("aspect", ASPECT_OPTIONS),
+            ):
                 topic, payload = layout_select_payload(
                     **common,
                     layout=layout,
@@ -565,13 +574,24 @@ class Poller:
             published += 1
 
         if self.profile.supports(CAP_WINDOW_BORDER):
-            topic, payload = window_border_switch_payload(
-                **common,
-                state_topic=f"{prefix}/window/border/state",
-                command_topic=f"{prefix}/window/border/set",
-            )
-            await self.mqtt.publish(topic, payload, retain=True)
-            published += 1
+            if self.profile.border_scope == "window":
+                for n in range(1, 5):
+                    topic, payload = window_border_per_window_switch_payload(
+                        n,
+                        **common,
+                        state_topic=f"{prefix}/window/{n}/border/state",
+                        command_topic=f"{prefix}/window/{n}/border/set",
+                    )
+                    await self.mqtt.publish(topic, payload, retain=True)
+                    published += 1
+            else:
+                topic, payload = window_border_switch_payload(
+                    **common,
+                    state_topic=f"{prefix}/window/border/state",
+                    command_topic=f"{prefix}/window/border/set",
+                )
+                await self.mqtt.publish(topic, payload, retain=True)
+                published += 1
             for n in range(1, 5):
                 topic, payload = border_color_select_payload(
                     n,

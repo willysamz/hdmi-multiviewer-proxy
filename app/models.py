@@ -215,7 +215,8 @@ class OutputResponse(BaseModel):
 class SetResolutionRequest(BaseModel):
     """Set resolution request."""
 
-    resolution: int = Field(ge=1, le=14)
+    # Firmware accepts x=1~15 (`help!`); the manual documents 14.
+    resolution: int = Field(ge=1, le=15)
 
 
 class SetHDCPRequest(BaseModel):
@@ -242,9 +243,14 @@ class SetPIPRequest(BaseModel):
     """Set PIP settings request."""
 
     position: int | None = Field(
-        None, ge=1, le=4, description="1=left_top, 2=left_bottom, 3=right_top, 4=right_bottom"
+        None,
+        ge=1,
+        le=5,
+        description="1=left_top, 2=left_bottom, 3=right_top, 4=right_bottom, 5=firmware-only",
     )
-    size: int | None = Field(None, ge=1, le=3, description="1=small, 2=middle, 3=large")
+    size: int | None = Field(
+        None, ge=1, le=4, description="1=small, 2=middle, 3=large, 4=firmware-only"
+    )
 
 
 # PBP Models
@@ -258,7 +264,8 @@ class PBPResponse(BaseModel):
 class SetPBPRequest(BaseModel):
     """Set PBP settings request."""
 
-    mode: int | None = Field(None, ge=1, le=2)
+    # Quad accepts x=1~3 on UHD firmware; triple is 1~2.
+    mode: int | None = Field(None, ge=1, le=3)
     aspect: int | None = Field(None, ge=1, le=2, description="1=full_screen, 2=16:9")
 
 

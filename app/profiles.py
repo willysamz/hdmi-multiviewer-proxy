@@ -64,6 +64,10 @@ UHD_EDID_OPTIONS: tuple[str, ...] = (
     "1024x768, Stereo Audio 2.0",
     "720p, Stereo Audio 2.0",
     "Copy from HDMI out",
+    # 19th slot: firmware accepts x=1~19 while the manual lists 18. `s edid
+    # user1 ...!` exists, so this is plausibly the user-defined EDID -- but
+    # that is inference, so it stays a placeholder until read back.
+    "Option 19",
 )
 
 HDS_EDID_OPTIONS: tuple[str, ...] = tuple(f"EDID mode {n}" for n in range(1, 8))
@@ -104,11 +108,31 @@ UHD_RESOLUTION_OPTIONS: tuple[str, ...] = (
     "1280x720p60",
     "1280x720p50",
     "1024x768p60",
+    # 15th slot: firmware accepts x=1~15, the manual lists 14, and the device
+    # reports AUTO -- absent from that table. Almost certainly this. Selecting
+    # it while already on AUTO is a no-op, so it self-confirms.
+    "Option 15",
 )
 HDS_RESOLUTION_OPTIONS: tuple[str, ...] = ()
 
 ASPECT_OPTIONS: tuple[str, ...] = ("Full screen", "16:9")
 LAYOUT_MODE_OPTIONS: tuple[str, ...] = ("Mode 1", "Mode 2")
+
+# The UHD firmware (MCU 1.10.03) accepts wider ranges than its manual
+# documents, discovered by running `help!` against the unit. Where the extra
+# slot has no known name it carries a placeholder: the option must EXIST for
+# the value to be reachable over MQTT at all, and a placeholder that can be
+# selected beats a value that cannot.
+QUAD_MODE_OPTIONS_UHD: tuple[str, ...] = ("Mode 1", "Mode 2", "Mode 3")
+PIP_POSITION_OPTIONS: tuple[str, ...] = (
+    "Top Left",
+    "Bottom Left",
+    "Top Right",
+    "Bottom Right",
+)
+PIP_POSITION_OPTIONS_UHD: tuple[str, ...] = PIP_POSITION_OPTIONS + ("Position 5",)
+PIP_SIZE_OPTIONS: tuple[str, ...] = ("Small", "Medium", "Large")
+PIP_SIZE_OPTIONS_UHD: tuple[str, ...] = PIP_SIZE_OPTIONS + ("Size 4",)
 HDCP_OPTIONS: tuple[str, ...] = ("HDCP 1.4", "HDCP 2.2", "Off")
 VKA_OPTIONS: tuple[str, ...] = ("Black screen", "Blue screen")
 VIDEO_MODE_OPTIONS: tuple[str, ...] = ("Video", "PC")
@@ -184,8 +208,12 @@ class DeviceProfile:
     GET_QUAD_ASPECT: str = "r quad aspect!"
 
     # --- HDS-only. Harmless to carry on both; the capability set gates use. ---
+    # Border scope DIFFERS between models and the commands are not the same:
+    # the UHD sets it per window, the HDS globally.
     SET_WINDOW_BORDER: str = "s window border {x}!"
     GET_WINDOW_BORDER: str = "r window border!"
+    SET_WINDOW_BORDER_PER_WINDOW: str = "s window {x} border {y}!"
+    GET_ALL_WINDOW_BORDERS: str = "r window 0 border!"
     SET_WINDOW_BORDER_COLOR: str = "s window {x} border color {y}!"
     GET_ALL_WINDOW_BORDER_COLORS: str = "r window 0 border color!"
     SET_SOURCE_OSD: str = "s window source osd {x}!"
@@ -194,6 +222,12 @@ class DeviceProfile:
     capabilities: frozenset[str] = field(default_factory=frozenset)
     edid_options: tuple[str, ...] = ()
     resolution_options: tuple[str, ...] = ()
+    pip_position_options: tuple[str, ...] = ()
+    pip_size_options: tuple[str, ...] = ()
+    quad_mode_options: tuple[str, ...] = ()
+    # "window" = one border switch per window (UHD); "global" = a single
+    # switch for all of them (HDS).
+    border_scope: str = "global"
     # True when edid_options are the device's REAL mode names (so a reported
     # state will match one). False when they are positional placeholders,
     # in which case the real value is surfaced via a sensor instead.
@@ -218,10 +252,28 @@ UHD_401MV = DeviceProfile(
     RESET="reset!",
     SET_INPUT_EDID="s input EDID {x}!",
     GET_INPUT_EDID="r input EDID!",
-    capabilities=frozenset({CAP_VOLUME, CAP_HDCP, CAP_VKA, CAP_ITC, CAP_EDID, CAP_AUTO_SWITCH}),
+    # Window border, border colour and source OSD were wrongly modelled as
+    # HDS-only: absent from the UHD manual, present in its firmware. `help!`
+    # is authoritative; the manual is not.
+    capabilities=frozenset(
+        {
+            CAP_VOLUME,
+            CAP_HDCP,
+            CAP_VKA,
+            CAP_ITC,
+            CAP_EDID,
+            CAP_AUTO_SWITCH,
+            CAP_WINDOW_BORDER,
+            CAP_SOURCE_OSD,
+        }
+    ),
     edid_options=UHD_EDID_OPTIONS,
     edid_options_verified=True,
     resolution_options=UHD_RESOLUTION_OPTIONS,
+    pip_position_options=PIP_POSITION_OPTIONS_UHD,
+    pip_size_options=PIP_SIZE_OPTIONS_UHD,
+    quad_mode_options=QUAD_MODE_OPTIONS_UHD,
+    border_scope="window",
 )
 
 # The HDS prefixes its whole system group, and drops volume/HDCP/VKA/ITC
@@ -254,6 +306,10 @@ HDS_401MV = replace(
     # for all four sources, so the real value is surfaced as a sensor instead.
     edid_options_verified=False,
     resolution_options=HDS_RESOLUTION_OPTIONS,
+    pip_position_options=PIP_POSITION_OPTIONS,
+    pip_size_options=PIP_SIZE_OPTIONS,
+    quad_mode_options=LAYOUT_MODE_OPTIONS,
+    border_scope="global",
 )
 
 PROFILES: dict[str, DeviceProfile] = {

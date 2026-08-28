@@ -169,20 +169,15 @@ class Controller:
             raise ControllerError(f"invalid mute payload: {payload!r}")
 
     async def set_pip_position(self, payload: str) -> None:
-        pos = _PIP_POSITION_MAP.get(payload.strip().lower())
-        if pos is None:
-            raise ControllerError(
-                f"invalid PIP position: {payload!r} (expected Top Left/Bottom Left/Top Right/Bottom Right)"
-            )
-        await self._send(
-            self.profile.SET_PIP_POSITION.format(x=int(pos)), f"set pip_position={payload}"
-        )
+        # Options come from the profile: the UHD firmware accepts x=1~5 while
+        # its manual documents 4, so a hardcoded map would make the fifth
+        # position unreachable.
+        x = self._index_of(self.profile.pip_position_options, payload, "PIP position")
+        await self._send(self.profile.SET_PIP_POSITION.format(x=x), f"set pip_position={payload}")
 
     async def set_pip_size(self, payload: str) -> None:
-        sz = _PIP_SIZE_MAP.get(payload.strip().lower())
-        if sz is None:
-            raise ControllerError(f"invalid PIP size: {payload!r} (expected Small/Medium/Large)")
-        await self._send(self.profile.SET_PIP_SIZE.format(x=int(sz)), f"set pip_size={payload}")
+        x = self._index_of(self.profile.pip_size_options, payload, "PIP size")
+        await self._send(self.profile.SET_PIP_SIZE.format(x=x), f"set pip_size={payload}")
 
     async def set_auto_switch(self, payload: str) -> None:
         """Auto-switch: on signal loss the device jumps to the next live input.
@@ -296,9 +291,31 @@ class Controller:
 
     # ---- HDS-only: window borders and source OSD ----
 
+    async def set_window_border_for(self, window_n: int, payload: str) -> None:
+        """Per-window border, UHD only (`s window x border y!`).
+
+        The HDS has only a global switch and a different command, so this is
+        gated on border_scope rather than the capability alone.
+        """
+        if self.profile.border_scope != "window":
+            raise ControllerError(f"{self.profile.key} sets borders globally, not per window")
+        if not 1 <= window_n <= 4:
+            raise ControllerError(f"invalid window number: {window_n}")
+        y = {"ON": 1, "OFF": 0}.get(payload)
+        if y is None:
+            raise ControllerError(f"invalid window border payload: {payload!r}")
+        await self._send(
+            self.profile.SET_WINDOW_BORDER_PER_WINDOW.format(x=window_n, y=y),
+            f"set window={window_n} border={payload}",
+        )
+
     async def set_window_border(self, payload: str) -> None:
         if not self.profile.supports(CAP_WINDOW_BORDER):
             raise ControllerError(f"{self.profile.key} has no window-border command")
+        if self.profile.border_scope != "global":
+            raise ControllerError(
+                f"{self.profile.key} sets borders per window; use set_window_border_for()"
+            )
         if payload == "ON":
             await self._send(self.profile.SET_WINDOW_BORDER.format(x=1), "set window_border=on")
         elif payload == "OFF":
