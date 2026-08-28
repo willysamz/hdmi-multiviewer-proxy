@@ -19,7 +19,23 @@ from app.commands import (
     PIPPosition,
     PIPSize,
 )
-from app.profiles import CAP_AUTO_SWITCH, CAP_EDID, CAP_VOLUME, get_profile
+from app.profiles import (
+    ASPECT_OPTIONS,
+    BORDER_COLORS,
+    CAP_AUTO_SWITCH,
+    CAP_EDID,
+    CAP_HDCP,
+    CAP_ITC,
+    CAP_SOURCE_OSD,
+    CAP_VKA,
+    CAP_VOLUME,
+    CAP_WINDOW_BORDER,
+    HDCP_OPTIONS,
+    LAYOUT_MODE_OPTIONS,
+    VIDEO_MODE_OPTIONS,
+    VKA_OPTIONS,
+    get_profile,
+)
 
 if TYPE_CHECKING:
     from app.config import Settings
@@ -202,6 +218,121 @@ class Controller:
                 f"invalid EDID mode: {payload!r} (expected one of {list(options)})"
             ) from None
         await self._send(self.profile.SET_INPUT_EDID.format(x=index), f"set edid={want}")
+
+    # ---- Output settings ----
+
+    def _index_of(self, options: tuple[str, ...], payload: str, what: str) -> int:
+        """Map a select payload to its 1-based device index.
+
+        Matching is case-insensitive against the profile's own option list, so
+        an out-of-range value is refused here rather than sent to the device.
+        """
+        want = payload.strip().lower()
+        for i, opt in enumerate(options, start=1):
+            if opt.lower() == want:
+                return i
+        raise ControllerError(f"invalid {what}: {payload!r} (expected one of {list(options)})")
+
+    async def set_output_resolution(self, payload: str) -> None:
+        options = self.profile.resolution_options
+        if not options:
+            raise ControllerError(
+                f"{self.profile.key} has no labelled resolution list; refusing to guess an index"
+            )
+        x = self._index_of(options, payload, "output resolution")
+        await self._send(
+            self.profile.SET_OUTPUT_RES.format(x=x), f"set output_resolution={payload}"
+        )
+
+    async def set_hdcp(self, payload: str) -> None:
+        if not self.profile.supports(CAP_HDCP):
+            raise ControllerError(f"{self.profile.key} has no HDCP command")
+        x = self._index_of(HDCP_OPTIONS, payload, "HDCP mode")
+        await self._send(self.profile.SET_OUTPUT_HDCP.format(x=x), f"set hdcp={payload}")
+
+    async def set_vka(self, payload: str) -> None:
+        if not self.profile.supports(CAP_VKA):
+            raise ControllerError(f"{self.profile.key} has no VKA command")
+        x = self._index_of(VKA_OPTIONS, payload, "VKA pattern")
+        await self._send(self.profile.SET_OUTPUT_VKA.format(x=x), f"set vka={payload}")
+
+    async def set_video_mode(self, payload: str) -> None:
+        if not self.profile.supports(CAP_ITC):
+            raise ControllerError(f"{self.profile.key} has no video-mode command")
+        x = self._index_of(VIDEO_MODE_OPTIONS, payload, "video mode")
+        await self._send(self.profile.SET_OUTPUT_ITC.format(x=x), f"set video_mode={payload}")
+
+    # ---- Layout mode / aspect. Shared by both models. ----
+
+    async def _set_layout(
+        self, template: str, options: tuple[str, ...], payload: str, what: str
+    ) -> None:
+        x = self._index_of(options, payload, what)
+        await self._send(template.format(x=x), f"set {what}={payload}")
+
+    async def set_quad_mode(self, payload: str) -> None:
+        await self._set_layout(
+            self.profile.SET_QUAD_MODE, LAYOUT_MODE_OPTIONS, payload, "quad mode"
+        )
+
+    async def set_quad_aspect(self, payload: str) -> None:
+        await self._set_layout(self.profile.SET_QUAD_ASPECT, ASPECT_OPTIONS, payload, "quad aspect")
+
+    async def set_pbp_mode(self, payload: str) -> None:
+        await self._set_layout(self.profile.SET_PBP_MODE, LAYOUT_MODE_OPTIONS, payload, "PBP mode")
+
+    async def set_pbp_aspect(self, payload: str) -> None:
+        await self._set_layout(self.profile.SET_PBP_ASPECT, ASPECT_OPTIONS, payload, "PBP aspect")
+
+    async def set_triple_mode(self, payload: str) -> None:
+        await self._set_layout(
+            self.profile.SET_TRIPLE_MODE, LAYOUT_MODE_OPTIONS, payload, "triple mode"
+        )
+
+    async def set_triple_aspect(self, payload: str) -> None:
+        await self._set_layout(
+            self.profile.SET_TRIPLE_ASPECT, ASPECT_OPTIONS, payload, "triple aspect"
+        )
+
+    # ---- HDS-only: window borders and source OSD ----
+
+    async def set_window_border(self, payload: str) -> None:
+        if not self.profile.supports(CAP_WINDOW_BORDER):
+            raise ControllerError(f"{self.profile.key} has no window-border command")
+        if payload == "ON":
+            await self._send(self.profile.SET_WINDOW_BORDER.format(x=1), "set window_border=on")
+        elif payload == "OFF":
+            await self._send(self.profile.SET_WINDOW_BORDER.format(x=0), "set window_border=off")
+        else:
+            raise ControllerError(f"invalid window border payload: {payload!r}")
+
+    async def set_border_color(self, window_n: int, payload: str) -> None:
+        if not self.profile.supports(CAP_WINDOW_BORDER):
+            raise ControllerError(f"{self.profile.key} has no border-colour command")
+        if not 1 <= window_n <= 4:
+            raise ControllerError(f"invalid window number: {window_n}")
+        y = self._index_of(BORDER_COLORS, payload, "border colour")
+        await self._send(
+            self.profile.SET_WINDOW_BORDER_COLOR.format(x=window_n, y=y),
+            f"set window={window_n} border_color={payload}",
+        )
+
+    async def set_source_osd(self, payload: str) -> None:
+        if not self.profile.supports(CAP_SOURCE_OSD):
+            raise ControllerError(f"{self.profile.key} has no source-OSD command")
+        if payload == "ON":
+            await self._send(self.profile.SET_SOURCE_OSD.format(x=1), "set source_osd=on")
+        elif payload == "OFF":
+            await self._send(self.profile.SET_SOURCE_OSD.format(x=0), "set source_osd=off")
+        else:
+            raise ControllerError(f"invalid source OSD payload: {payload!r}")
+
+    # ---- Reboot. `reset` is deliberately NOT exposed here: it discards the
+    # serial baud rate along with the layout, which costs all serial control
+    # until it is fixed through the OSD. It stays on the REST API only. ----
+
+    async def reboot(self) -> None:
+        await self._send(self.profile.REBOOT, "reboot")
 
     # ---- low-level helpers ----
 

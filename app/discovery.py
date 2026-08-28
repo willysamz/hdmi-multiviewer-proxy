@@ -135,6 +135,7 @@ def _select_payload(
     command_topic: str,
     availability_topic: str,
     model: str | None = None,
+    entity_category: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     topic = f"{discovery_prefix}/select/{device_id}/{object_id}/config"
     payload = _base_payload(
@@ -150,6 +151,7 @@ def _select_payload(
             "options": options,
             "icon": icon,
             "optimistic": False,
+            **({"entity_category": entity_category} if entity_category else {}),
         },
     )
     return topic, payload
@@ -394,4 +396,209 @@ def edid_select_payload(
             "entity_category": "config",
         },
     )
+    return topic, payload
+
+
+# --- Phase 5: full command exposure -----------------------------------------
+# Selects whose options come from the active profile, plus the HDS-only border
+# and OSD controls. Set-and-forget entities carry entity_category="config" so
+# HA files them under the device's configuration block rather than the main
+# card.
+
+
+def resolution_select_payload(*, options: list[str], **kw: Any) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_output_resolution` — settable output resolution.
+
+    Published only for a profile that has labelled options. It coexists with
+    the resolution *sensor*: the sensor reports the device's truth (which can
+    be `AUTO`, a value absent from the settable list), while this select offers
+    only what can actually be set.
+    """
+    return _select_payload(
+        object_id="multiviewer_output_resolution",
+        name="Multiviewer Output Resolution",
+        icon="mdi:monitor-screenshot",
+        options=options,
+        **kw,
+    )
+
+
+def hdcp_select_payload(*, options: list[str], **kw: Any) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_hdcp` — what the output advertises downstream.
+
+    Not filed under config: this is the first thing to reach for when a
+    protected source (a games console) shows black through the multiviewer.
+    """
+    return _select_payload(
+        object_id="multiviewer_hdcp",
+        name="Multiviewer HDCP",
+        icon="mdi:shield-lock-outline",
+        options=options,
+        **kw,
+    )
+
+
+def vka_select_payload(*, options: list[str], **kw: Any) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_vka` — pattern shown when no source is present.
+
+    Keeps the HDMI link up so the display does not drop the signal and
+    re-handshake, which is the multi-second black flash when a source sleeps.
+    """
+    return _select_payload(
+        object_id="multiviewer_vka",
+        name="Multiviewer VKA Pattern",
+        icon="mdi:television-shimmer",
+        options=options,
+        entity_category="config",
+        **kw,
+    )
+
+
+def video_mode_select_payload(*, options: list[str], **kw: Any) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_video_mode` — IT Content flag (video vs PC).
+
+    PC mode asks the display for 1:1 pixel mapping and usually lower latency.
+    """
+    return _select_payload(
+        object_id="multiviewer_video_mode",
+        name="Multiviewer Video Mode",
+        icon="mdi:monitor-eye",
+        options=options,
+        entity_category="config",
+        **kw,
+    )
+
+
+def layout_select_payload(
+    *, layout: str, kind: str, options: list[str], **kw: Any
+) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_{layout}_{kind}` for quad / pbp / triple.
+
+    `aspect` matters far more outside quad: quad cells are already 16:9 so a
+    16:9 source fills them either way, while PBP cells are roughly 8:9 and
+    triple narrower still, so `Full screen` visibly squashes every source.
+    Quad is left on the main card for the one source that is not 16:9.
+    """
+    return _select_payload(
+        object_id=f"multiviewer_{layout}_{kind}",
+        name=f"Multiviewer {layout.upper() if layout != 'triple' else 'Triple'} {kind.capitalize()}",
+        icon="mdi:view-grid-outline" if kind == "mode" else "mdi:aspect-ratio",
+        options=options,
+        **({} if layout == "quad" else {"entity_category": "config"}),
+        **kw,
+    )
+
+
+def border_color_select_payload(
+    window_n: int, *, options: list[str], **kw: Any
+) -> tuple[str, dict[str, Any]]:
+    """`select.multiviewer_window_{n}_border_color` — HDS only.
+
+    Options are colour NAMES because the device reports names, never indices;
+    an index-labelled list would publish a state matching no option.
+    """
+    return _select_payload(
+        object_id=f"multiviewer_window_{window_n}_border_color",
+        name=f"Multiviewer Window {window_n} Border Colour",
+        icon="mdi:border-color",
+        options=options,
+        **kw,
+    )
+
+
+def window_border_switch_payload(
+    *,
+    discovery_prefix: str,
+    device_id: str,
+    device_name: str,
+    state_topic: str,
+    command_topic: str,
+    availability_topic: str,
+    model: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """`switch.multiviewer_window_border` — HDS only. Draws a border round
+    every window, which is what separates adjacent tiles in quad."""
+    object_id = "multiviewer_window_border"
+    topic = f"{discovery_prefix}/switch/{device_id}/{object_id}/config"
+    payload = _base_payload(
+        object_id=object_id,
+        name="Multiviewer Window Border",
+        state_topic=state_topic,
+        availability_topic=availability_topic,
+        device_id=device_id,
+        device_name=device_name,
+        model=model,
+        extra={
+            "command_topic": command_topic,
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "icon": "mdi:border-all-variant",
+            "optimistic": False,
+        },
+    )
+    return topic, payload
+
+
+def source_osd_switch_payload(
+    *,
+    discovery_prefix: str,
+    device_id: str,
+    device_name: str,
+    state_topic: str,
+    command_topic: str,
+    availability_topic: str,
+    model: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """`switch.multiviewer_source_osd` — HDS only. Labels each window with the
+    input it is showing, so a tile can be identified without counting corners."""
+    object_id = "multiviewer_source_osd"
+    topic = f"{discovery_prefix}/switch/{device_id}/{object_id}/config"
+    payload = _base_payload(
+        object_id=object_id,
+        name="Multiviewer Source OSD",
+        state_topic=state_topic,
+        availability_topic=availability_topic,
+        device_id=device_id,
+        device_name=device_name,
+        model=model,
+        extra={
+            "command_topic": command_topic,
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "icon": "mdi:format-text",
+            "optimistic": False,
+        },
+    )
+    return topic, payload
+
+
+def reboot_button_payload(
+    *,
+    discovery_prefix: str,
+    device_id: str,
+    device_name: str,
+    command_topic: str,
+    availability_topic: str,
+    model: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """`button.multiviewer_reboot` — restart the unit.
+
+    Config category deliberately: it drops video for the init cycle, so it
+    should not sit where it can be brushed. `reset` is never published at all.
+    """
+    object_id = "multiviewer_reboot"
+    topic = f"{discovery_prefix}/button/{device_id}/{object_id}/config"
+    payload: dict[str, Any] = {
+        "name": "Multiviewer Reboot",
+        "unique_id": f"{device_id}_{object_id}",
+        "object_id": object_id,
+        "command_topic": command_topic,
+        "payload_press": "PRESS",
+        "availability_topic": availability_topic,
+        "payload_available": "online",
+        "payload_not_available": "offline",
+        "icon": "mdi:restart",
+        "entity_category": "config",
+        "device": device_block(device_id, device_name, model or DEVICE_MODEL),
+    }
     return topic, payload

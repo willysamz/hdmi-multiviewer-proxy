@@ -301,8 +301,21 @@ later reads the old value and looks like the same failure.
 Control is **MQTT** (discovery entities plus command/state topics). The REST
 API is internal and used for diagnostics only.
 
-Not currently exposed on either model: output HDCP, VKA, ITC; PBP/triple/quad
-mode and aspect; window borders, border colour and source OSD; `reboot`;
-`r status!`. `reset` is deliberately **never** exposed over MQTT — it is
-reachable only through the REST API, so it cannot be triggered from a
-dashboard.
+As of **0.5.0 every settable command is exposed** except two:
+
+- **`reset`** — deliberately never published. It discards the serial baud rate
+  along with the layout, which costs all serial control until it is corrected
+  through the OSD. Reachable on the REST API only.
+- **`r status!`** — a combined dump of values the poller already reads
+  individually, so it would be a redundant sensor rather than a control.
+
+One partial: the **HDS output resolution** accepts x=1~4 but names those values
+nowhere, and the device reports real resolution strings (`1920x1080p60`). An
+index-labelled select would publish a state matching no option, so the HDS keeps
+its read-only resolution *sensor* until the four names are captured. The UHD
+gets a full 14-option select.
+
+Similarly, the UHD may report `AUTO`, which is not settable over RS-232. The
+resolution **sensor** always shows the device's truth including `AUTO`; the
+**select** offers only the 14 values that can actually be set, and publishes no
+state while the device is on `AUTO`.

@@ -20,22 +20,42 @@ from app.commands import (
 from app.discovery import (
     audio_source_select_payload,
     auto_switch_switch_payload,
+    border_color_select_payload,
     connected_binary_sensor_payload,
     edid_select_payload,
+    hdcp_select_payload,
     input_source_select_payload,
+    layout_select_payload,
     mode_select_payload,
     mute_switch_payload,
     pip_position_select_payload,
     pip_size_select_payload,
     power_switch_payload,
+    reboot_button_payload,
+    resolution_select_payload,
     resolution_sensor_payload,
+    source_osd_switch_payload,
+    video_mode_select_payload,
+    vka_select_payload,
     volume_number_payload,
+    window_border_switch_payload,
     window_select_payload,
 )
 from app.profiles import (
+    ASPECT_OPTIONS,
+    BORDER_COLORS,
     CAP_AUTO_SWITCH,
     CAP_EDID,
+    CAP_HDCP,
+    CAP_ITC,
+    CAP_SOURCE_OSD,
+    CAP_VKA,
     CAP_VOLUME,
+    CAP_WINDOW_BORDER,
+    HDCP_OPTIONS,
+    LAYOUT_MODE_OPTIONS,
+    VIDEO_MODE_OPTIONS,
+    VKA_OPTIONS,
     get_profile,
 )
 from app.serial_handler import ConnectionState
@@ -91,6 +111,11 @@ class Poller:
         self._immediate_event = asyncio.Event()
 
         self._discovery_published = False
+        # Config-class settings (HDCP, VKA, ITC, layout aspects, border
+        # colours) barely ever change, and reading them every cycle would
+        # roughly double the serial traffic on a 115200 line for no benefit.
+        # They are refreshed every SLOW_POLL_EVERY cycles instead.
+        self._cycle = 0
         # Per-topic last-published cache so we publish deltas only.
         self._last: dict[str, str] = {}
 
@@ -130,8 +155,12 @@ class Poller:
             if not done:  # pragma: no cover
                 continue
 
+    SLOW_POLL_EVERY = 6
+
     async def poll_once(self) -> None:
         """One cycle: query each entity group + publish deltas."""
+        self._cycle += 1
+        slow = self._cycle == 1 or self._cycle % self.SLOW_POLL_EVERY == 0
         # Always publish discovery on first cycle (even if some queries fail).
         if not self._discovery_published:
             await self._publish_discovery()
@@ -224,8 +253,73 @@ class Poller:
                 await self._publish_delta(f"{prefix}/edid/state", edid)
 
         res = await self._read(self.profile.GET_OUTPUT_RES, ResponseParser.parse_resolution)
+        if res is not None and self.profile.resolution_options:
+            # The select can only offer settable values; the device may report
+            # AUTO, which is not one of them. Publish the select's state only
+            # when it maps to an option, so HA never shows an invalid state.
+            match = next(
+                (o for o in self.profile.resolution_options if o.lower() == res.strip().lower()),
+                None,
+            )
+            if match:
+                await self._publish_delta(f"{prefix}/output/resolution/select/state", match)
+
+        if slow:
+            await self._poll_config_settings(prefix)
+
         if res is not None:
             await self._publish_delta(f"{prefix}/output/resolution/state", res)
+
+    async def _poll_config_settings(self, prefix: str) -> None:
+        """Read the rarely-changing settings. Runs every SLOW_POLL_EVERY cycles."""
+        if self.profile.supports(CAP_HDCP):
+            v = await self._read(self.profile.GET_OUTPUT_HDCP, ResponseParser.parse_hdcp)
+            name = {"hdcp_1_4": "HDCP 1.4", "hdcp_2_2": "HDCP 2.2", "off": "Off"}.get(v or "")
+            if name:
+                await self._publish_delta(f"{prefix}/output/hdcp/state", name)
+
+        if self.profile.supports(CAP_VKA):
+            v = await self._read(self.profile.GET_OUTPUT_VKA, ResponseParser.parse_vka)
+            name = {"black_screen": "Black screen", "blue_screen": "Blue screen"}.get(v or "")
+            if name:
+                await self._publish_delta(f"{prefix}/output/vka/state", name)
+
+        if self.profile.supports(CAP_ITC):
+            v = await self._read(self.profile.GET_OUTPUT_ITC, ResponseParser.parse_video_mode)
+            name = {"video": "Video", "pc": "PC"}.get(v or "")
+            if name:
+                await self._publish_delta(f"{prefix}/output/video_mode/state", name)
+
+        for layout, mode_cmd, aspect_cmd in (
+            ("quad", self.profile.GET_QUAD_MODE, self.profile.GET_QUAD_ASPECT),
+            ("pbp", self.profile.GET_PBP_MODE, self.profile.GET_PBP_ASPECT),
+            ("triple", self.profile.GET_TRIPLE_MODE, self.profile.GET_TRIPLE_ASPECT),
+        ):
+            m = await self._read(mode_cmd, ResponseParser.parse_pbp_mode)
+            if m in (1, 2):
+                await self._publish_delta(
+                    f"{prefix}/{layout}/mode/state", LAYOUT_MODE_OPTIONS[m - 1]
+                )
+            a = await self._read(aspect_cmd, ResponseParser.parse_aspect)
+            name = {"full_screen": ASPECT_OPTIONS[0], "16_9": ASPECT_OPTIONS[1]}.get(a or "")
+            if name:
+                await self._publish_delta(f"{prefix}/{layout}/aspect/state", name)
+
+        if self.profile.supports(CAP_WINDOW_BORDER):
+            b = await self._read(self.profile.GET_WINDOW_BORDER, ResponseParser.parse_window_border)
+            if b is not None:
+                await self._publish_delta(f"{prefix}/window/border/state", "ON" if b else "OFF")
+            colors = await self._read(
+                self.profile.GET_ALL_WINDOW_BORDER_COLORS, ResponseParser.parse_border_colors
+            )
+            for n, name in (colors or {}).items():
+                if name in BORDER_COLORS:
+                    await self._publish_delta(f"{prefix}/window/{n}/border_color/state", name)
+
+        if self.profile.supports(CAP_SOURCE_OSD):
+            v = await self._read(self.profile.GET_SOURCE_OSD, ResponseParser.parse_source_osd)
+            if v is not None:
+                await self._publish_delta(f"{prefix}/window/source_osd/state", "ON" if v else "OFF")
 
     async def _read(self, command: str, parser):
         """Issue a serial command and parse the response. Returns None on
@@ -390,6 +484,100 @@ class Poller:
             )
             await self.mqtt.publish(topic, payload, retain=True)
             published += 1
+
+        # --- Phase 5: full command exposure ---
+
+        if self.profile.resolution_options:
+            topic, payload = resolution_select_payload(
+                **common,
+                options=list(self.profile.resolution_options),
+                state_topic=f"{prefix}/output/resolution/select/state",
+                command_topic=f"{prefix}/output/resolution/set",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
+
+        if self.profile.supports(CAP_HDCP):
+            topic, payload = hdcp_select_payload(
+                **common,
+                options=list(HDCP_OPTIONS),
+                state_topic=f"{prefix}/output/hdcp/state",
+                command_topic=f"{prefix}/output/hdcp/set",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
+
+        if self.profile.supports(CAP_VKA):
+            topic, payload = vka_select_payload(
+                **common,
+                options=list(VKA_OPTIONS),
+                state_topic=f"{prefix}/output/vka/state",
+                command_topic=f"{prefix}/output/vka/set",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
+
+        if self.profile.supports(CAP_ITC):
+            topic, payload = video_mode_select_payload(
+                **common,
+                options=list(VIDEO_MODE_OPTIONS),
+                state_topic=f"{prefix}/output/video_mode/state",
+                command_topic=f"{prefix}/output/video_mode/set",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
+
+        for layout in ("quad", "pbp", "triple"):
+            for kind, opts in (("mode", LAYOUT_MODE_OPTIONS), ("aspect", ASPECT_OPTIONS)):
+                topic, payload = layout_select_payload(
+                    **common,
+                    layout=layout,
+                    kind=kind,
+                    options=list(opts),
+                    state_topic=f"{prefix}/{layout}/{kind}/state",
+                    command_topic=f"{prefix}/{layout}/{kind}/set",
+                )
+                await self.mqtt.publish(topic, payload, retain=True)
+                published += 1
+
+        if self.profile.supports(CAP_WINDOW_BORDER):
+            topic, payload = window_border_switch_payload(
+                **common,
+                state_topic=f"{prefix}/window/border/state",
+                command_topic=f"{prefix}/window/border/set",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
+            for n in range(1, 5):
+                topic, payload = border_color_select_payload(
+                    n,
+                    **common,
+                    options=list(BORDER_COLORS),
+                    state_topic=f"{prefix}/window/{n}/border_color/state",
+                    command_topic=f"{prefix}/window/{n}/border_color/set",
+                )
+                await self.mqtt.publish(topic, payload, retain=True)
+                published += 1
+
+        if self.profile.supports(CAP_SOURCE_OSD):
+            topic, payload = source_osd_switch_payload(
+                **common,
+                state_topic=f"{prefix}/window/source_osd/state",
+                command_topic=f"{prefix}/window/source_osd/set",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
+
+        topic, payload = reboot_button_payload(
+            discovery_prefix=discovery_prefix,
+            device_id=device_id,
+            device_name=device_name,
+            availability_topic=availability_topic,
+            model=self.settings.ha_device_model,
+            command_topic=f"{prefix}/reboot/set",
+        )
+        await self.mqtt.publish(topic, payload, retain=True)
+        published += 1
 
         # sensor.multiviewer_resolution
         topic, payload = resolution_sensor_payload(

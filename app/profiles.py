@@ -68,6 +68,51 @@ UHD_EDID_OPTIONS: tuple[str, ...] = (
 
 HDS_EDID_OPTIONS: tuple[str, ...] = tuple(f"EDID mode {n}" for n in range(1, 8))
 
+# Border colours, enumerated from the live HDS on 2026-08-28 by setting each
+# index and reading the name back. The device reports NAMES (`yellow`), never
+# indices, so these must be the select's options or the published state would
+# never match one.
+BORDER_COLORS: tuple[str, ...] = (
+    "black",
+    "red",
+    "green",
+    "blue",
+    "yellow",
+    "magenta",
+    "cyan",
+    "white",
+    "gray",
+)
+
+# Output-resolution labels. The UHD's 14 come from its manual. The HDS accepts
+# x=1~4 but names them nowhere, and it reports real resolution strings
+# (`1920x1080p60`), so an index-labelled select would publish a state matching
+# no option. Left empty until the names are captured; the read-only resolution
+# sensor covers that model meanwhile.
+UHD_RESOLUTION_OPTIONS: tuple[str, ...] = (
+    "4096x2160p60",
+    "4096x2160p50",
+    "3840x2160p60",
+    "3840x2160p50",
+    "3840x2160p30",
+    "3840x2160p25",
+    "1920x1200p60RB",
+    "1920x1080p60",
+    "1920x1080p50",
+    "1360x768p60",
+    "1280x800p60",
+    "1280x720p60",
+    "1280x720p50",
+    "1024x768p60",
+)
+HDS_RESOLUTION_OPTIONS: tuple[str, ...] = ()
+
+ASPECT_OPTIONS: tuple[str, ...] = ("Full screen", "16:9")
+LAYOUT_MODE_OPTIONS: tuple[str, ...] = ("Mode 1", "Mode 2")
+HDCP_OPTIONS: tuple[str, ...] = ("HDCP 1.4", "HDCP 2.2", "Off")
+VKA_OPTIONS: tuple[str, ...] = ("Black screen", "Blue screen")
+VIDEO_MODE_OPTIONS: tuple[str, ...] = ("Video", "PC")
+
 
 @dataclass(frozen=True)
 class DeviceProfile:
@@ -138,8 +183,17 @@ class DeviceProfile:
     SET_QUAD_ASPECT: str = "s quad aspect {x}!"
     GET_QUAD_ASPECT: str = "r quad aspect!"
 
+    # --- HDS-only. Harmless to carry on both; the capability set gates use. ---
+    SET_WINDOW_BORDER: str = "s window border {x}!"
+    GET_WINDOW_BORDER: str = "r window border!"
+    SET_WINDOW_BORDER_COLOR: str = "s window {x} border color {y}!"
+    GET_ALL_WINDOW_BORDER_COLORS: str = "r window 0 border color!"
+    SET_SOURCE_OSD: str = "s window source osd {x}!"
+    GET_SOURCE_OSD: str = "r window source osd!"
+
     capabilities: frozenset[str] = field(default_factory=frozenset)
     edid_options: tuple[str, ...] = ()
+    resolution_options: tuple[str, ...] = ()
 
     def supports(self, capability: str) -> bool:
         """True when this model has the capability at all."""
@@ -162,6 +216,7 @@ UHD_401MV = DeviceProfile(
     GET_INPUT_EDID="r input EDID!",
     capabilities=frozenset({CAP_VOLUME, CAP_HDCP, CAP_VKA, CAP_ITC, CAP_EDID, CAP_AUTO_SWITCH}),
     edid_options=UHD_EDID_OPTIONS,
+    resolution_options=UHD_RESOLUTION_OPTIONS,
 )
 
 # The HDS prefixes its whole system group, and drops volume/HDCP/VKA/ITC
@@ -188,6 +243,7 @@ HDS_401MV = replace(
         }
     ),
     edid_options=HDS_EDID_OPTIONS,
+    resolution_options=HDS_RESOLUTION_OPTIONS,
 )
 
 PROFILES: dict[str, DeviceProfile] = {

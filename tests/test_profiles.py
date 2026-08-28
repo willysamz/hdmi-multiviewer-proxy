@@ -248,3 +248,145 @@ async def test_edid_select_options_come_from_the_profile():
     assert len(edid["options"]) == 7
     # EDID is disruptive; it belongs in HA's config block, not the main card.
     assert edid["entity_category"] == "config"
+
+
+# --- Phase 5: full command exposure -----------------------------------------
+# Response strings in these tests are VERBATIM captures from the live devices
+# on 2026-08-28, not invented. The border-colour palette was enumerated by
+# setting each index and reading the name back.
+
+
+def test_border_colours_are_names_in_device_order():
+    from app.profiles import BORDER_COLORS
+
+    assert BORDER_COLORS == (
+        "black", "red", "green", "blue", "yellow", "magenta", "cyan", "white", "gray",
+    )
+    # yellow is index 5 -- verified on hardware, and the value both garage
+    # units were left on.
+    assert BORDER_COLORS.index("yellow") + 1 == 5
+
+
+@pytest.mark.asyncio
+async def test_border_colour_renders_the_device_index():
+    c, serial = _controller("hds401mv")
+    await c.set_border_color(2, "yellow")
+    serial.send_command.assert_awaited_once_with("s window 2 border color 5!")
+
+
+@pytest.mark.asyncio
+async def test_uhd_refuses_border_commands():
+    c, serial = _controller("uhd401mv")
+    with pytest.raises(ControllerError, match="no border-colour command"):
+        await c.set_border_color(1, "red")
+    with pytest.raises(ControllerError, match="no window-border command"):
+        await c.set_window_border("ON")
+    serial.send_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_hds_refuses_hdcp_vka_and_video_mode():
+    c, serial = _controller("hds401mv")
+    for call, msg in (
+        (lambda: c.set_hdcp("HDCP 2.2"), "no HDCP command"),
+        (lambda: c.set_vka("Black screen"), "no VKA command"),
+        (lambda: c.set_video_mode("PC"), "no video-mode command"),
+    ):
+        with pytest.raises(ControllerError, match=msg):
+            await call()
+    serial.send_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_hds_refuses_resolution_rather_than_guessing_an_index():
+    # The HDS accepts x=1~4 but names them nowhere, so there is no safe
+    # mapping from a label to an index. Refuse rather than guess.
+    c, serial = _controller("hds401mv")
+    with pytest.raises(ControllerError, match="no labelled resolution list"):
+        await c.set_output_resolution("1920x1080p60")
+    serial.send_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_uhd_resolution_renders_the_manual_index():
+    c, serial = _controller("uhd401mv")
+    await c.set_output_resolution("1920x1080p60")  # 8th in the manual's table
+    serial.send_command.assert_awaited_once_with("s output res 8!")
+
+
+@pytest.mark.asyncio
+async def test_hdcp_options_map_to_device_indices():
+    c, serial = _controller("uhd401mv")
+    await c.set_hdcp("HDCP 2.2")
+    serial.send_command.assert_awaited_once_with("s output hdcp 2!")
+
+
+@pytest.mark.asyncio
+async def test_layout_setters_render_per_layout_and_kind():
+    c, serial = _controller("uhd401mv")
+    for call, expected in (
+        (lambda: c.set_quad_aspect("16:9"), "s quad aspect 2!"),
+        (lambda: c.set_pbp_aspect("Full screen"), "s PBP aspect 1!"),
+        (lambda: c.set_triple_mode("Mode 2"), "s triple mode 2!"),
+    ):
+        serial.send_command.reset_mock()
+        await call()
+        serial.send_command.assert_awaited_once_with(expected)
+
+
+@pytest.mark.asyncio
+async def test_reboot_follows_the_model_prefix():
+    c_uhd, s_uhd = _controller("uhd401mv")
+    await c_uhd.reboot()
+    s_uhd.send_command.assert_awaited_once_with("reboot!")
+
+    c_hds, s_hds = _controller("hds401mv")
+    await c_hds.reboot()
+    s_hds.send_command.assert_awaited_once_with("s reboot!")
+
+
+def test_new_parsers_against_verbatim_device_output():
+    assert ResponseParser.parse_window_border("window border off") is False
+    assert ResponseParser.parse_source_osd("window source osd:on") is True
+    assert ResponseParser.parse_vka("output VKA pattern: black screen") == "black_screen"
+    assert ResponseParser.parse_border_colors(
+        "window 1 border color yellow\nwindow 2 border color red"
+    ) == {1: "yellow", 2: "red"}
+
+
+@pytest.mark.asyncio
+async def test_discovery_entity_sets_differ_per_model():
+    p_uhd, mqtt_uhd = _discovery_poller("uhd401mv")
+    await p_uhd._publish_discovery()
+    uhd = {c.args[0] for c in mqtt_uhd.publish.call_args_list if c.args[1] != ""}
+
+    p_hds, mqtt_hds = _discovery_poller("hds401mv")
+    await p_hds._publish_discovery()
+    hds = {c.args[0] for c in mqtt_hds.publish.call_args_list if c.args[1] != ""}
+
+    def has(topics, frag):
+        return any(frag in t for t in topics)
+
+    # UHD-only
+    assert has(uhd, "multiviewer_hdcp") and not has(hds, "multiviewer_hdcp")
+    assert has(uhd, "multiviewer_output_resolution")
+    assert not has(hds, "multiviewer_output_resolution")  # no labelled options
+    # HDS-only
+    assert has(hds, "multiviewer_window_border") and not has(uhd, "multiviewer_window_border")
+    assert has(hds, "window_1_border_color") and not has(uhd, "window_1_border_color")
+    assert has(hds, "multiviewer_source_osd") and not has(uhd, "multiviewer_source_osd")
+    # shared
+    for topics in (uhd, hds):
+        assert has(topics, "multiviewer_quad_aspect")
+        assert has(topics, "multiviewer_pbp_aspect")
+        assert has(topics, "multiviewer_reboot")
+
+
+@pytest.mark.asyncio
+async def test_reset_is_never_published():
+    # reset discards the serial baud rate along with the layout. It must not
+    # be reachable from a dashboard on either model.
+    for key in ("uhd401mv", "hds401mv"):
+        p, mqtt = _discovery_poller(key)
+        await p._publish_discovery()
+        assert not any("reset" in c.args[0] for c in mqtt.publish.call_args_list)
