@@ -46,28 +46,30 @@ CAP_SOURCE_OSD = "source_osd"  # HDS only, not yet exposed
 # generic rather than inventing names that might mislead.
 
 UHD_EDID_OPTIONS: tuple[str, ...] = (
-    "4K2K60_444, Stereo Audio 2.0",
-    "4K2K60_444, Dolby/DTS 5.1",
-    "4K2K60_444, HD Audio 7.1",
-    "4K2K30_444, Stereo Audio 2.0",
-    "4K2K30_444, Dolby/DTS 5.1",
-    "4K2K30_444, HD Audio 7.1",
-    "1080P, Stereo Audio 2.0",
-    "1080P, Dolby/DTS 5.1",
-    "1080P, HD Audio 7.1",
-    "1920x1200, Stereo Audio 2.0",
-    "1680x1050, Stereo Audio 2.0",
-    "1600x1200, Stereo Audio 2.0",
-    "1440x900, Stereo Audio 2.0",
-    "1360x768, Stereo Audio 2.0",
-    "1280x1024, Stereo Audio 2.0",
-    "1024x768, Stereo Audio 2.0",
-    "720p, Stereo Audio 2.0",
+    "4K2K60_444,Stereo Audio 2.0",
+    "4K2K60_444,Dolby/DTS 5.1",
+    "4K2K60_444,HD Audio 7.1",
+    "4K2K30_444,Stereo Audio 2.0",
+    "4K2K30_444,Dolby/DTS 5.1",
+    "4K2K30_444,HD Audio 7.1",
+    "1080P,Stereo Audio 2.0",
+    "1080P,Dolby/DTS 5.1",
+    "1080P,HD Audio 7.1",
+    "1920x1200,Stereo Audio 2.0",
+    "1680x1050,Stereo Audio 2.0",
+    "1600x1200,Stereo Audio 2.0",
+    "1440x900,Stereo Audio 2.0",
+    "1360x768,Stereo Audio 2.0",
+    "1280x1024,Stereo Audio 2.0",
+    "1024x768,Stereo Audio 2.0",
+    "720p,Stereo Audio 2.0",
     "Copy from HDMI out",
     # 19th slot: firmware accepts x=1~19 while the manual lists 18. `s edid
     # user1 ...!` exists, so this is plausibly the user-defined EDID -- but
     # that is inference, so it stays a placeholder until read back.
-    "Option 19",
+    # Enumerated on hardware 2026-08-28: `s input EDID 19!` reads back USER1,
+    # matching the `s edid user1 ...!` command the firmware also exposes.
+    "USER1",
 )
 
 HDS_EDID_OPTIONS: tuple[str, ...] = tuple(f"EDID mode {n}" for n in range(1, 8))
@@ -108,10 +110,12 @@ UHD_RESOLUTION_OPTIONS: tuple[str, ...] = (
     "1280x720p60",
     "1280x720p50",
     "1024x768p60",
-    # 15th slot: firmware accepts x=1~15, the manual lists 14, and the device
-    # reports AUTO -- absent from that table. Almost certainly this. Selecting
-    # it while already on AUTO is a no-op, so it self-confirms.
-    "Option 15",
+    # 15th slot. INFERRED, not proven: setting 15 while the device was on AUTO
+    # left it on AUTO and raised no error, and AUTO is the one value the device
+    # reports that the manual's 14-entry table omits. Proving it would mean
+    # setting a known resolution first, and if 15 then did NOT restore AUTO
+    # there is no programmatic way back -- so it stays an inference.
+    "AUTO",
 )
 HDS_RESOLUTION_OPTIONS: tuple[str, ...] = ()
 
@@ -123,16 +127,21 @@ LAYOUT_MODE_OPTIONS: tuple[str, ...] = ("Mode 1", "Mode 2")
 # slot has no known name it carries a placeholder: the option must EXIST for
 # the value to be reachable over MQTT at all, and a placeholder that can be
 # selected beats a value that cannot.
-QUAD_MODE_OPTIONS_UHD: tuple[str, ...] = ("Mode 1", "Mode 2", "Mode 3")
+# `help!` reports the range the PARSER ACCEPTS, not the number of distinct
+# values. Enumerated on hardware 2026-08-28: quad mode 3 reads back as "quad
+# mode 2", PIP position 5 as "right bottom" (= 4), PIP size 4 as "large" (= 3).
+# The extra slots are aliases that clamp, so offering them would be a control
+# that silently does nothing.
+QUAD_MODE_OPTIONS_UHD: tuple[str, ...] = ("Mode 1", "Mode 2")
 PIP_POSITION_OPTIONS: tuple[str, ...] = (
     "Top Left",
     "Bottom Left",
     "Top Right",
     "Bottom Right",
 )
-PIP_POSITION_OPTIONS_UHD: tuple[str, ...] = PIP_POSITION_OPTIONS + ("Position 5",)
+PIP_POSITION_OPTIONS_UHD: tuple[str, ...] = PIP_POSITION_OPTIONS
 PIP_SIZE_OPTIONS: tuple[str, ...] = ("Small", "Medium", "Large")
-PIP_SIZE_OPTIONS_UHD: tuple[str, ...] = PIP_SIZE_OPTIONS + ("Size 4",)
+PIP_SIZE_OPTIONS_UHD: tuple[str, ...] = PIP_SIZE_OPTIONS
 HDCP_OPTIONS: tuple[str, ...] = ("HDCP 1.4", "HDCP 2.2", "Off")
 VKA_OPTIONS: tuple[str, ...] = ("Black screen", "Blue screen")
 VIDEO_MODE_OPTIONS: tuple[str, ...] = ("Video", "PC")

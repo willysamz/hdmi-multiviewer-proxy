@@ -166,7 +166,7 @@ def test_edid_command_case_follows_each_model():
 @pytest.mark.asyncio
 async def test_edid_renders_the_1_based_index_for_the_chosen_label():
     c, serial = _controller("uhd401mv")
-    await c.set_edid("1080P, Stereo Audio 2.0")  # 7th in the manual's list
+    await c.set_edid("1080P,Stereo Audio 2.0")  # 7th; note: no space after the comma
     serial.send_command.assert_awaited_once_with("s input EDID 7!")
 
 
@@ -296,13 +296,16 @@ async def test_border_scope_differs_between_models():
         await c_hds.set_window_border_for(1, "ON")
 
 
-def test_uhd_firmware_ranges_beat_its_manual():
-    """Five option lists were one short because they came from the manual."""
+def test_uhd_firmware_ranges_beat_its_manual_where_the_values_are_real():
+    """Two of the manual's short lists were genuinely missing a value.
+
+    Resolution and EDID gained a real 15th/19th entry (AUTO and USER1). The
+    other three ranges `help!` reports are accept-ranges whose extra slots
+    alias the last real value -- see
+    test_ranges_help_reports_are_not_all_distinct_values.
+    """
     assert len(UHD_401MV.resolution_options) == 15  # manual: 14
     assert len(UHD_401MV.edid_options) == 19  # manual: 18
-    assert len(UHD_401MV.pip_position_options) == 5  # manual: 4
-    assert len(UHD_401MV.pip_size_options) == 4  # manual: 3
-    assert len(UHD_401MV.quad_mode_options) == 3  # manual: 2
     # The HDS keeps its smaller, help!-derived ranges.
     assert len(HDS_401MV.pip_position_options) == 4
     assert len(HDS_401MV.quad_mode_options) == 2
@@ -477,3 +480,50 @@ def test_raw_endpoint_allowlist_accepts_only_reads():
         "",
     ):
         assert not _is_read_only(bad), bad
+
+
+# --- enumerated on hardware 2026-08-28 ---------------------------------------
+
+
+def test_enumerated_edid_labels_match_device_output_exactly():
+    """A label that differs even by whitespace never matches the reported state.
+
+    The device emits `4K2K60_444,Stereo Audio 2.0` with no space after the
+    comma; prettifying it broke the match silently.
+    """
+    assert UHD_401MV.edid_options[0] == "4K2K60_444,Stereo Audio 2.0"
+    # `s input EDID 19!` reads back USER1 -- confirmed on hardware.
+    assert UHD_401MV.edid_options[-1] == "USER1"
+    assert len(UHD_401MV.edid_options) == 19
+
+
+def test_ranges_help_reports_are_not_all_distinct_values():
+    """`help!` gives what the parser ACCEPTS, not how many values exist.
+
+    Enumerated: quad mode 3 -> "quad mode 2", PIP position 5 -> "right bottom"
+    (= 4), PIP size 4 -> "large" (= 3). Offering those slots would be a control
+    that silently does nothing, so they are not offered.
+    """
+    assert len(UHD_401MV.quad_mode_options) == 2  # help! says x=1~3
+    assert len(UHD_401MV.pip_position_options) == 4  # help! says x=1~5
+    assert len(UHD_401MV.pip_size_options) == 3  # help! says x=1~4
+
+
+def test_resolution_keeps_auto_as_the_fifteenth():
+    # Inferred, not proven -- see the profile comment.
+    assert UHD_401MV.resolution_options[-1] == "AUTO"
+    assert len(UHD_401MV.resolution_options) == 15
+
+
+def test_border_colour_parser_handles_both_device_formats():
+    from app.commands import ResponseParser as R
+
+    # HDS: bare word. UHD: colon, and empty when unset.
+    assert R.parse_border_colors("window 1 border color yellow") == {1: "yellow"}
+    assert R.parse_border_colors("window 1 border color: blue") == {1: "blue"}
+    # Empty values are omitted, not returned blank -- and the newline must not
+    # let the next line's first word be captured as this line's colour.
+    assert R.parse_border_colors(
+        "window 1 border color:\nwindow 2 border color:\n"
+        "window 3 border color:\nwindow 4 border color:"
+    ) == {}

@@ -427,10 +427,24 @@ class ResponseParser:
         lines, so this returns a map rather than a single value. Colour names
         come back as words (`yellow`), never indices -- which is why the
         select's options must be the names.
+
+        The two models word this differently, both captured from hardware:
+
+        * HDS: ``window 1 border color yellow``
+        * UHD: ``window 1 border color:``  -- colon, and an EMPTY value when no
+          colour is set
+
+        An empty value is omitted rather than returned blank, so the caller
+        publishes no state instead of one that matches no option.
         """
         out: dict[int, str] = {}
-        for m in re.finditer(r"window\s+(\d)\s+border\s+color\s+(\w+)", response, re.IGNORECASE):
-            out[int(m.group(1))] = m.group(2).strip().lower()
+        # [^\S\n] is horizontal whitespace only -- plain \s* would cross the
+        # newline and capture the next line's leading word as this line's colour.
+        pattern = r"window[^\S\n]+(\d)[^\S\n]+border[^\S\n]+color[:\s][^\S\n]*([A-Za-z]*)"
+        for m in re.finditer(pattern, response, re.IGNORECASE):
+            name = m.group(2).strip().lower()
+            if name:
+                out[int(m.group(1))] = name
         return out
 
     @staticmethod
