@@ -1,13 +1,22 @@
 # MViewer Proxy
 
-REST API proxy for controlling UHD-401MV HDMI multiviewer via RS-232.
+Proxy for controlling OREI 4x1 HDMI multiviewers over RS-232, publishing them
+to Home Assistant via MQTT.
+
+Supports two models, selected with `DEVICE_PROFILE` (`uhd401mv` or
+`hds401mv`). **They are not command-compatible** — the UHD takes `power z!`
+while the HDS takes `s power z!`, and the HDS has no volume/HDCP/VKA/ITC
+commands at all. `r type!` returns the same string on both, so the model
+cannot be auto-detected and must be declared. See the
+[RS-232 command reference](docs/commands.md) for the complete set per device.
 
 ## Features
 
-- Full RS-232 command support for UHD-401MV multiviewer
-- RESTful API with OpenAPI documentation
+- Full RS-232 command support for the UHD-401MV and HDS-401MV
+- Home Assistant MQTT discovery — the primary control surface
+- Capability-gated entities: a model only gets controls it can actually perform
+- REST API with OpenAPI documentation (internal / diagnostics)
 - Kubernetes-ready with Helm chart
-- Home Assistant integration support
 - Automatic reconnection with exponential backoff
 - Health endpoints for liveness/readiness probes
 
