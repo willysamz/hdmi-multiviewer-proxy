@@ -117,7 +117,14 @@ UHD_RESOLUTION_OPTIONS: tuple[str, ...] = (
     # there is no programmatic way back -- so it stays an inference.
     "AUTO",
 )
-HDS_RESOLUTION_OPTIONS: tuple[str, ...] = ()
+# Enumerated on hardware 2026-08-28 -- the HDS names these nowhere, so each
+# index was set and read back, then restored to index 2 (the unit's baseline).
+HDS_RESOLUTION_OPTIONS: tuple[str, ...] = (
+    "3840x2160p30",
+    "1920x1080p60",
+    "1280x720p60",
+    "1920x1200p60(rb)",
+)
 
 ASPECT_OPTIONS: tuple[str, ...] = ("Full screen", "16:9")
 LAYOUT_MODE_OPTIONS: tuple[str, ...] = ("Mode 1", "Mode 2")

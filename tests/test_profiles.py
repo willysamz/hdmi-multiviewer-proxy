@@ -325,13 +325,25 @@ async def test_hds_refuses_hdcp_vka_and_video_mode():
 
 
 @pytest.mark.asyncio
-async def test_hds_refuses_resolution_rather_than_guessing_an_index():
-    # The HDS accepts x=1~4 but names them nowhere, so there is no safe
-    # mapping from a label to an index. Refuse rather than guess.
-    c, serial = _controller("hds401mv")
-    with pytest.raises(ControllerError, match="no labelled resolution list"):
-        await c.set_output_resolution("1920x1080p60")
-    serial.send_command.assert_not_awaited()
+async def test_a_profile_without_resolution_labels_refuses_rather_than_guesses():
+    """The guard still matters for any future model whose labels are unknown.
+
+    The HDS had exactly this problem until its four were enumerated on
+    hardware; a label-to-index mapping must never be invented.
+    """
+    from dataclasses import replace as _replace
+
+    from app import profiles as P
+
+    unlabelled = _replace(P.HDS_401MV, key="unlabelled", resolution_options=())
+    P.PROFILES["unlabelled"] = unlabelled
+    try:
+        c, serial = _controller("unlabelled")
+        with pytest.raises(ControllerError, match="no labelled resolution list"):
+            await c.set_output_resolution("1920x1080p60")
+        serial.send_command.assert_not_awaited()
+    finally:
+        P.PROFILES.pop("unlabelled", None)
 
 
 @pytest.mark.asyncio
@@ -396,8 +408,10 @@ async def test_discovery_entity_sets_differ_per_model():
 
     # UHD-only
     assert has(uhd, "multiviewer_hdcp") and not has(hds, "multiviewer_hdcp")
-    assert has(uhd, "multiviewer_output_resolution")
-    assert not has(hds, "multiviewer_output_resolution")  # no labelled options
+    # Both now have a resolution select: the HDS's four labels were enumerated
+    # on hardware, so it no longer has to refuse.
+    for topics in (uhd, hds):
+        assert has(topics, "multiviewer_output_resolution")
     # Borders and OSD exist on BOTH -- absent from the UHD manual, present in
     # its firmware. Only the border SHAPE differs.
     for topics in (uhd, hds):
@@ -527,3 +541,22 @@ def test_border_colour_parser_handles_both_device_formats():
         "window 1 border color:\nwindow 2 border color:\n"
         "window 3 border color:\nwindow 4 border color:"
     ) == {}
+
+
+def test_hds_resolution_labels_were_enumerated_from_hardware():
+    """The HDS names its 4 resolutions nowhere; each index was set and read
+    back. Labels must match the device's exact reply or the state never
+    matches an option."""
+    assert HDS_401MV.resolution_options == (
+        "3840x2160p30",
+        "1920x1080p60",
+        "1280x720p60",
+        "1920x1200p60(rb)",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hds_resolution_now_renders_an_index():
+    c, serial = _controller("hds401mv")
+    await c.set_output_resolution("1280x720p60")  # 3rd
+    serial.send_command.assert_awaited_once_with("s output res 3!")
