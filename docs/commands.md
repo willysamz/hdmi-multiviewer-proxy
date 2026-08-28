@@ -276,10 +276,39 @@ explained again here.
 
 | Command | What it does |
 |---|---|
-| `s output res x!` | Output resolution, **x=1~4 only** — a much smaller set than the UHD's 14. The device's own `help!` does not enumerate them and we have no HDS manual, so read back with `r output res!` to see what a value maps to. |
+| `s output res x!` | Output resolution, **x=1~4 only** (table below) — a much smaller set than the UHD's 15. |
 | `r output res!` | Current output resolution, e.g. `out resolution: 1920x1080p60`. |
-| `s input edid x!` | **x=1~7 only**, and **lowercase `edid`**. Same meaning and same hazards as the UHD command. Mode labels are not documented anywhere available. |
+| `s input edid x!` | **x=1~7 only**, and **lowercase `edid`**. See the warning below — this unit does not appear to act on it. |
 | `r input edid!` | Current EDID mode. |
+
+### Output resolution values (x=1~4)
+
+Enumerated on hardware 2026-08-28 — the HDS names these nowhere, so each index
+was set and read back, then restored.
+
+| x | Resolution |
+|---|---|
+| 1 | 3840x2160p30 |
+| 2 | 1920x1080p60 |
+| 3 | 1280x720p60 |
+| 4 | 1920x1200p60(rb) |
+
+!!! warning "This unit does not act on `s input edid x!`"
+
+    All seven indices were sent (`s input edid 1!` … `7!`) and the device
+    continued to report `copy from hdmi out` throughout. Not a comms problem: a
+    `s multiview!` change issued in the same session took effect immediately,
+    and the proxy log confirms every EDID command went out.
+
+    Layout was ruled out — repeating the test in quad mode changed nothing. The
+    remaining hypothesis is that EDID negotiation needs a **live source** on the
+    inputs; the Fire TVs feeding this unit were powered off. Its firmware
+    (v1.00.08) is also markedly older than the UHD's (1.10.03), where the same
+    command works.
+
+    Consequence: the EDID select sets without error but the unit stays put, and
+    its 7 mode names remain unknown. A diagnostic **sensor** carries whatever
+    the device reports so nothing is hidden.
 
 **No HDCP, VKA or ITC commands exist on this model.** Sending them returns an
 error.
