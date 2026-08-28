@@ -96,6 +96,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
 
     steps:
       - uses: actions/checkout@v4
@@ -123,6 +125,19 @@ jobs:
         run: |
           helm package chart/ --destination .helm-packages
 
+      - name: Record the packaged chart digest
+        run: |
+          set -euo pipefail
+          sha256sum .helm-packages/*.tgz | awk '{print $1}' > .helm-packages/digest.txt
+          echo "packaged digest: $(cat .helm-packages/digest.txt)"
+
+      - name: Upload chart + digest for the verify job
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-chart
+          path: .helm-packages/
+          retention-days: 7
+
       - name: Upload chart to release
         uses: softprops/action-gh-release@v1
         with:
@@ -147,3 +162,74 @@ jobs:
           git add .
           git commit -m "Release chart ${{ steps.version.outputs.VERSION }}"
           git push
+
+  # An ALARM, not a preventer -- be clear about that.
+  #
+  # Everything irreversible (tag, image push, GitHub release, gh-pages commit)
+  # has already happened by the time this runs; it cannot close the race. What
+  # it does is answer, in one visible place, the question that actually matters
+  # before anyone bumps a Fleet bundle: "is this version pullable yet?"
+  #
+  # Why that question needs asking: on the 0.6.0 release the GitHub Pages index
+  # lagged ~75s. Fleet fetched inside that window, failed with "no chart version
+  # found", and -- because its gitjob does not retry -- silently kept deploying
+  # the PREVIOUS version while reporting Ready. Nothing surfaced the failure.
+  #
+  # The real fix is consumer-side (Fleet must not report Ready on a failed
+  # fetch) or publishing OCI charts to ghcr, where no async index exists at all.
+  # Both are tracked; neither is this workflow's job.
+  verify-chart-published:
+    needs: [release-helm-chart, build-and-push-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Download the chart this build packaged
+        uses: actions/download-artifact@v4
+        with:
+          name: packaged-chart
+          path: packaged
+
+      - name: Pull the published chart and compare digests
+        env:
+          VERSION: ${{ needs.release-helm-chart.outputs.version }}
+          REPO_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          CHART: hdmi-multiviewer-proxy
+        run: |
+          set -euo pipefail
+          EXPECTED="$(cat packaged/digest.txt)"
+          echo "expecting digest $EXPECTED for $CHART $VERSION"
+
+          for i in $(seq 1 40); do
+            # helm pull exercises the SAME path Fleet does: it reads index.yaml,
+            # follows the urls: entry, and fetches the tarball. Grepping the
+            # index for a filename proved none of that -- and matched a
+            # same-named tgz left over from an earlier release of this version.
+            rm -rf pulled && mkdir -p pulled
+            if helm repo add verify "$REPO_URL" --force-update >/dev/null 2>&1 \
+               && helm repo update verify >/dev/null 2>&1 \
+               && helm pull "verify/$CHART" --version "$VERSION" --destination pulled >/dev/null 2>&1; then
+              ACTUAL="$(sha256sum pulled/*.tgz | awk '{print $1}')"
+              if [ "$ACTUAL" = "$EXPECTED" ]; then
+                echo "resolvable and byte-identical after $(( (i-1) * 15 ))s"
+                exit 0
+              fi
+              # Resolvable but WRONG bytes: a stale CDN copy, or a previous
+              # release of this same version number. Not success.
+              echo "  attempt $i/40 - pulled $ACTUAL, expected $EXPECTED (stale copy)"
+            else
+              echo "  attempt $i/40 - not pullable yet"
+            fi
+            # NB: `[ ... ] && sleep` here would return non-zero on the final
+            # iteration and, as the last statement in the loop body, trip
+            # `set -e` before the error message below is ever reached.
+            if [ "$i" -lt 40 ]; then sleep 15; fi
+          done
+
+          echo "::error::$CHART $VERSION is not pullable from $REPO_URL, or the"
+          echo "::error::published bytes differ from this build. Do NOT bump a Fleet"
+          echo "::error::bundle to $VERSION: the gitjob will fail and then report"
+          echo "::error::Ready while still running the previous version."
+          exit 1

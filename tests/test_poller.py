@@ -33,14 +33,22 @@ async def test_power_state_reads_device_not_connection():
 
 
 @pytest.mark.asyncio
-async def test_power_state_falls_back_to_connection_when_read_fails():
+async def test_power_is_not_invented_when_the_socket_lies():
+    """Socket open + read failed => we do NOT know the power state.
+
+    This previously published "ON" on the reasoning "socket up -> assume on".
+    A USB/IP re-attach on 2026-08-28 disproved that: pyserial's is_open stayed
+    True on a dead handle while every read returned empty, and HA was told the
+    unit was ON for minutes. Publishing nothing leaves the last known value and
+    lets connected/state carry the fault.
+    """
     p, serial, mqtt = _poller()
     serial.state = ConnectionState.ON
     serial.is_connected = True
     serial.send_command = AsyncMock(return_value=(False, None, "timeout"))
     await p.poll_once()
     published = {c.args[0]: c.args[1] for c in mqtt.publish.call_args_list}
-    assert published["mv/power/state"] == "ON"  # socket up → assume on
+    assert "mv/power/state" not in published
 
 
 @pytest.mark.asyncio
