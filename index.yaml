@@ -2,8 +2,27 @@ apiVersion: v1
 entries:
   hdmi-multiviewer-proxy:
   - apiVersion: v2
+    appVersion: 0.5.0
+    created: "2026-08-28T19:42:01.953614458Z"
+    description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
+    digest: 47372f2977e413e358f3cdbfa5f6911b33381357125560274bb444dc26d27d64
+    keywords:
+    - multiviewer
+    - hdmi
+    - rs232
+    - serial
+    - home-assistant
+    - mqtt
+    maintainers:
+    - name: wsamuels
+    name: hdmi-multiviewer-proxy
+    type: application
+    urls:
+    - https://willysamz.github.io/hdmi-multiviewer-proxy/hdmi-multiviewer-proxy-0.5.0.tgz
+    version: 0.5.0
+  - apiVersion: v2
     appVersion: 0.4.1
-    created: "2026-08-28T15:37:01.413507032Z"
+    created: "2026-08-28T19:42:01.95333379Z"
     description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
     digest: 6e442eaaeb7806d0072940a2b866ae73a3c3915b395677f216bb98a503bbc779
     keywords:
@@ -22,7 +41,7 @@ entries:
     version: 0.4.1
   - apiVersion: v2
     appVersion: 0.4.0
-    created: "2026-08-28T15:37:01.413223125Z"
+    created: "2026-08-28T19:42:01.953028365Z"
     description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
     digest: 62e54f1c3cd52e56f77663977469f0648f8f7064123175ddf27a7258b8437bca
     keywords:
@@ -41,7 +60,7 @@ entries:
     version: 0.4.0
   - apiVersion: v2
     appVersion: 0.3.4
-    created: "2026-08-28T15:37:01.412939321Z"
+    created: "2026-08-28T19:42:01.952683461Z"
     description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
     digest: 70a570cf4b1935cf04a887cacbd988dbac6fc90af8c4c6f519d09230c19198f4
     keywords:
@@ -60,7 +79,7 @@ entries:
     version: 0.3.4
   - apiVersion: v2
     appVersion: 0.3.3
-    created: "2026-08-28T15:37:01.412697799Z"
+    created: "2026-08-28T19:42:01.952378697Z"
     description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
     digest: fe62ffaa48660c1908aa21760e8d7e533b76a31f820ff46181d56c09b72d4263
     keywords:
@@ -79,7 +98,7 @@ entries:
     version: 0.3.3
   - apiVersion: v2
     appVersion: 0.3.2
-    created: "2026-08-28T15:37:01.412439961Z"
+    created: "2026-08-28T19:42:01.952082927Z"
     description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
     digest: a3ea8c3c6180f5e4a3b09e142df5bae500a7b166ca8a70afc5a08938671bcffe
     keywords:
@@ -98,7 +117,7 @@ entries:
     version: 0.3.2
   - apiVersion: v2
     appVersion: 0.3.1
-    created: "2026-08-28T15:37:01.412117372Z"
+    created: "2026-08-28T19:42:01.951779455Z"
     description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
     digest: c0776d526b68444e75a8e32ca515b777402921212f3f461622b5e342778d56fa
     keywords:
@@ -117,7 +136,7 @@ entries:
     version: 0.3.1
   - apiVersion: v2
     appVersion: 0.3.0
-    created: "2026-08-28T15:37:01.411124534Z"
+    created: "2026-08-28T19:42:01.951489943Z"
     description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
     digest: 68ea2e8c26acd308d3684723da39fe69d62504de78dc408fd17dc7650a6f75f1
     keywords:
@@ -136,7 +155,7 @@ entries:
     version: 0.3.0
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-08-28T15:37:01.410632374Z"
+    created: "2026-08-28T19:42:01.951134404Z"
     description: REST + MQTT proxy for UHD-401MV multiviewer RS-232 control
     digest: 7abe7b8b75bd3175990ac68d12f771e4481f09b95480f13fb387c655ae578761
     keywords:
@@ -155,7 +174,7 @@ entries:
     version: 0.2.0
   - apiVersion: v2
     appVersion: 0.1.2
-    created: "2026-08-28T15:37:01.41033783Z"
+    created: "2026-08-28T19:42:01.950808889Z"
     description: REST API proxy for UHD-401MV multiviewer RS-232 control
     digest: ead520434b2560d9b1cd6aecd718cbd6fe29f15597e89ef70e91f0e5337031b3
     keywords:
@@ -173,7 +192,7 @@ entries:
     version: 0.1.2
   - apiVersion: v2
     appVersion: 0.1.1
-    created: "2026-08-28T15:37:01.410084612Z"
+    created: "2026-08-28T19:42:01.950546618Z"
     description: REST API proxy for UHD-401MV multiviewer RS-232 control
     digest: ea74abd420ab7386d04b5219b56b1a1695d24bc8e6c23d08a88df2287e3492e8
     keywords:
@@ -189,4 +208,4 @@ entries:
     urls:
     - https://willysamz.github.io/hdmi-multiviewer-proxy/hdmi-multiviewer-proxy-0.1.1.tgz
     version: 0.1.1
-generated: "2026-08-28T15:37:01.409723179Z"
+generated: "2026-08-28T19:42:01.950128505Z"
