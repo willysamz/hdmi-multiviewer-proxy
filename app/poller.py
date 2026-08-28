@@ -250,7 +250,17 @@ class Poller:
         if self.profile.supports(CAP_EDID):
             edid = await self._read(self.profile.GET_INPUT_EDID, ResponseParser.parse_edid)
             if edid is not None:
-                await self._publish_delta(f"{prefix}/edid/state", edid)
+                # Publish only a value the select actually offers. HA rejects a
+                # state absent from options[] and logs an error every time --
+                # and the HDS reports real mode NAMES (`copy from hdmi out`)
+                # while its option list is still generic, so an unguarded
+                # publish would error on every poll.
+                match = next(
+                    (o for o in self.profile.edid_options if o.lower() == edid.strip().lower()),
+                    None,
+                )
+                if match:
+                    await self._publish_delta(f"{prefix}/edid/state", match)
 
         res = await self._read(self.profile.GET_OUTPUT_RES, ResponseParser.parse_resolution)
         if res is not None and self.profile.resolution_options:

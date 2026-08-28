@@ -390,3 +390,20 @@ async def test_reset_is_never_published():
         p, mqtt = _discovery_poller(key)
         await p._publish_discovery()
         assert not any("reset" in c.args[0] for c in mqtt.publish.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_edid_state_is_only_published_when_it_matches_an_option():
+    # The HDS reports real mode names while its option list is still generic.
+    # HA rejects a state absent from options[] and logs an error each time, so
+    # an unguarded publish would error on every poll.
+    p, mqtt = _discovery_poller("hds401mv")
+    p._discovery_published = True
+    p.serial.is_connected = True
+    from app.serial_handler import ConnectionState
+
+    p.serial.state = ConnectionState.ON
+    p.serial.send_command = AsyncMock(return_value=(True, "input edid: copy from hdmi out", None))
+    await p.poll_once()
+    published = {c.args[0] for c in mqtt.publish.call_args_list}
+    assert "mv/edid/state" not in published
