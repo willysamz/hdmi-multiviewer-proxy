@@ -23,6 +23,7 @@ from app.discovery import (
     border_color_select_payload,
     connected_binary_sensor_payload,
     edid_select_payload,
+    edid_sensor_payload,
     hdcp_select_payload,
     input_source_select_payload,
     layout_select_payload,
@@ -255,12 +256,17 @@ class Poller:
                 # and the HDS reports real mode NAMES (`copy from hdmi out`)
                 # while its option list is still generic, so an unguarded
                 # publish would error on every poll.
-                match = next(
-                    (o for o in self.profile.edid_options if o.lower() == edid.strip().lower()),
-                    None,
-                )
-                if match:
-                    await self._publish_delta(f"{prefix}/edid/state", match)
+                if self.profile.edid_options_verified:
+                    match = next(
+                        (o for o in self.profile.edid_options if o.lower() == edid.strip().lower()),
+                        None,
+                    )
+                    if match:
+                        await self._publish_delta(f"{prefix}/edid/state", match)
+                else:
+                    # Real value, unmatched label set -- surface it verbatim on
+                    # the diagnostic sensor rather than discarding it.
+                    await self._publish_delta(f"{prefix}/edid/mode/state", edid)
 
         res = await self._read(self.profile.GET_OUTPUT_RES, ResponseParser.parse_resolution)
         if res is not None and self.profile.resolution_options:
@@ -549,6 +555,14 @@ class Poller:
                 )
                 await self.mqtt.publish(topic, payload, retain=True)
                 published += 1
+
+        if self.profile.supports(CAP_EDID) and not self.profile.edid_options_verified:
+            topic, payload = edid_sensor_payload(
+                **common,
+                state_topic=f"{prefix}/edid/mode/state",
+            )
+            await self.mqtt.publish(topic, payload, retain=True)
+            published += 1
 
         if self.profile.supports(CAP_WINDOW_BORDER):
             topic, payload = window_border_switch_payload(

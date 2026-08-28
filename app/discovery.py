@@ -602,3 +602,34 @@ def reboot_button_payload(
         "device": device_block(device_id, device_name, model or DEVICE_MODEL),
     }
     return topic, payload
+
+
+def edid_sensor_payload(
+    *,
+    discovery_prefix: str,
+    device_id: str,
+    device_name: str,
+    state_topic: str,
+    availability_topic: str,
+    model: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """`sensor.multiviewer_edid_mode` — the EDID mode the device reports.
+
+    Published only when the profile's select options are placeholders rather
+    than the device's real mode names. The device's value is valid; our list
+    just does not contain it, and hiding a true reading behind an incomplete
+    label set would be the wrong trade.
+    """
+    object_id = "multiviewer_edid_mode"
+    topic = f"{discovery_prefix}/sensor/{device_id}/{object_id}/config"
+    payload = _base_payload(
+        object_id=object_id,
+        name="Multiviewer EDID Mode",
+        state_topic=state_topic,
+        availability_topic=availability_topic,
+        device_id=device_id,
+        device_name=device_name,
+        model=model,
+        extra={"icon": "mdi:high-definition-box", "entity_category": "diagnostic"},
+    )
+    return topic, payload

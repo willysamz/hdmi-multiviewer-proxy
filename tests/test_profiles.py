@@ -393,6 +393,22 @@ async def test_reset_is_never_published():
 
 
 @pytest.mark.asyncio
+async def test_hds_reports_its_real_edid_value_on_the_sensor():
+    """`copy from hdmi out` is a VALID device value -- our HDS label set just
+    does not contain it. It must be surfaced, not discarded."""
+    p, mqtt = _discovery_poller("hds401mv")
+    p._discovery_published = True
+    from app.serial_handler import ConnectionState
+
+    p.serial.is_connected = True
+    p.serial.state = ConnectionState.ON
+    p.serial.send_command = AsyncMock(return_value=(True, "input edid: copy from hdmi out", None))
+    await p.poll_once()
+    pub = {c.args[0]: c.args[1] for c in mqtt.publish.call_args_list}
+    assert pub.get("mv/edid/mode/state") == "copy from hdmi out"
+
+
+@pytest.mark.asyncio
 async def test_edid_state_is_only_published_when_it_matches_an_option():
     # The HDS reports real mode names while its option list is still generic.
     # HA rejects a state absent from options[] and logs an error each time, so

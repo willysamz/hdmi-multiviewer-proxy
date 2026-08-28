@@ -194,6 +194,10 @@ class DeviceProfile:
     capabilities: frozenset[str] = field(default_factory=frozenset)
     edid_options: tuple[str, ...] = ()
     resolution_options: tuple[str, ...] = ()
+    # True when edid_options are the device's REAL mode names (so a reported
+    # state will match one). False when they are positional placeholders,
+    # in which case the real value is surfaced via a sensor instead.
+    edid_options_verified: bool = False
 
     def supports(self, capability: str) -> bool:
         """True when this model has the capability at all."""
@@ -216,6 +220,7 @@ UHD_401MV = DeviceProfile(
     GET_INPUT_EDID="r input EDID!",
     capabilities=frozenset({CAP_VOLUME, CAP_HDCP, CAP_VKA, CAP_ITC, CAP_EDID, CAP_AUTO_SWITCH}),
     edid_options=UHD_EDID_OPTIONS,
+    edid_options_verified=True,
     resolution_options=UHD_RESOLUTION_OPTIONS,
 )
 
@@ -243,6 +248,11 @@ HDS_401MV = replace(
         }
     ),
     edid_options=HDS_EDID_OPTIONS,
+    # Placeholders. The HDS names its 7 modes nowhere, and the device reports
+    # real names (`copy from hdmi out`) -- a valid value our list simply does
+    # not contain. Learning them means cycling EDID, which renegotiates HDMI
+    # for all four sources, so the real value is surfaced as a sensor instead.
+    edid_options_verified=False,
     resolution_options=HDS_RESOLUTION_OPTIONS,
 )
 
