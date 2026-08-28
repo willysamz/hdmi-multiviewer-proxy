@@ -174,20 +174,26 @@ class Poller:
         connected = self.serial.state == ConnectionState.ON
         await self._publish_delta(f"{prefix}/connected/state", "ON" if connected else "OFF")
 
-        # Power: prefer the device's own r power! answer whenever the transport
-        # is open; fall back to OFF only when the read fails / port is down.
-        # Gated on the LIVE transport status (is_connected), not the cached
-        # `state` (which only updates at connect + the 30s heartbeat and would
-        # otherwise republish a stale value for up to 30s).
+        # Power comes from the device's own `r power!` answer, and ONLY from
+        # that. The read is gated on the LIVE transport status (is_connected)
+        # rather than the cached `state`, which only updates at connect and on
+        # the 30s heartbeat and would otherwise republish a stale value.
         power = None
         if self.serial.is_connected:
             power = await self._read(self.profile.GET_POWER, ResponseParser.parse_power)
-        if power is None:
-            await self._publish_delta(
-                f"{prefix}/power/state", "ON" if self.serial.is_connected else "OFF"
-            )
-        else:
+        if power is not None:
             await self._publish_delta(f"{prefix}/power/state", "ON" if power else "OFF")
+        elif not self.serial.is_connected:
+            # Transport is down: report OFF. Deliberate fail-safe so automations
+            # that gate on power never act on a device we cannot reach.
+            await self._publish_delta(f"{prefix}/power/state", "OFF")
+        # Remaining case: the socket claims to be open but the read failed, so
+        # we do NOT know the power state -- publish nothing and let the last
+        # value stand. This branch used to assume "socket up -> ON". On
+        # 2026-08-28 a USB/IP re-attach left pyserial's is_open True on a dead
+        # handle while every read returned empty, and HA was told the unit was
+        # ON for minutes while nothing could be read from it. `connected/state`
+        # above already carries the real signal.
 
         # The remaining queries only work when the device is powered ON.
         if not connected:
