@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "HDMI Multiviewer Proxy",
-    "description": "REST API for controlling UHD-401MV multiviewer via RS-232",
-    "version": "0.1.0"
+    "description": "REST + MQTT proxy for UHD-401MV multiviewer (RS-232). v0.2 adds optional MQTT publishing with Home Assistant discovery; the REST endpoints stay available for direct scripting + debug.",
+    "version": "0.5.0"
   },
   "paths": {
     "/healthz/live": {
@@ -153,6 +153,48 @@
                 "schema": {
                   "type": "object",
                   "title": "Response Factory Reset Api Reset Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/raw": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Raw Command",
+        "description": "Send a **read-only** raw RS-232 command and return the verbatim reply.\n\nDiagnostics only. The allowlist accepts `help!` and anything starting with\n`r ` -- every setter, `reboot` and `reset` included, is refused here rather\nthan forwarded, so this endpoint cannot change device state.\n\nNot published over MQTT and never surfaced as an entity: it exists so a\nprotocol question can be answered by asking the device, instead of\ninferring from a manual. The two models are not command-compatible and the\none command that was ever assumed rather than verified is the one that\nbroke production.",
+        "operationId": "raw_command_api_raw_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RawCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawCommandResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1506,6 +1548,62 @@
         "title": "PowerResponse",
         "description": "Power control response."
       },
+      "RawCommandRequest": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "title": "Command",
+            "description": "Raw command, e.g. 'help!' or 'r output res!'"
+          }
+        },
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "title": "RawCommandRequest",
+        "description": "A raw RS-232 command to send to the device.\n\nDeliberately read-only: see `app.routers.system.raw_command` for the\nallowlist. Setters are rejected rather than forwarded."
+      },
+      "RawCommandResponse": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "command",
+          "success"
+        ],
+        "title": "RawCommandResponse",
+        "description": "The device's verbatim reply, unparsed."
+      },
       "SetAudioSourceRequest": {
         "properties": {
           "source": {
@@ -1811,7 +1909,7 @@
           "input": {
             "type": "integer",
             "maximum": 4.0,
-            "minimum": 1.0,
+            "minimum": 0.0,
             "title": "Input"
           },
           "input_name": {

@@ -319,3 +319,26 @@ Similarly, the UHD may report `AUTO`, which is not settable over RS-232. The
 resolution **sensor** always shows the device's truth including `AUTO`; the
 **select** offers only the 14 values that can actually be set, and publishes no
 state while the device is on `AUTO`.
+
+## Asking the device directly
+
+`POST /api/raw` sends a **read-only** raw command and returns the verbatim
+reply. The allowlist accepts `help!` and anything starting with `r `; every
+setter — `reboot` and `reset` included — is refused rather than forwarded, so
+the endpoint cannot change device state. It is REST-only and never published
+over MQTT.
+
+```bash
+curl -s -X POST http://hdmi-multiviewer-proxy:8080/api/raw \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"help!"}'
+```
+
+**`help!` is the authoritative answer to any protocol question** — it lists the
+device's own command set with parameter ranges, which is how the HDS's 46
+commands in this document were obtained. Use it in preference to this file or
+any manual when the two disagree; firmware wins.
+
+It exists because a unit whose serial line the proxy owns exclusively is
+otherwise uninterrogable. The HDS could be reached over its ESPHome TCP bridge;
+the UHD could not be reached at all.

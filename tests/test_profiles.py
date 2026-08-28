@@ -423,3 +423,28 @@ async def test_edid_state_is_only_published_when_it_matches_an_option():
     await p.poll_once()
     published = {c.args[0] for c in mqtt.publish.call_args_list}
     assert "mv/edid/state" not in published
+
+
+# --- raw diagnostic endpoint ------------------------------------------------
+
+
+def test_raw_endpoint_allowlist_accepts_only_reads():
+    from app.routers.system import _is_read_only
+
+    for ok in ("help!", "r output res!", "R INPUT EDID!", "  r power!  "):
+        assert _is_read_only(ok), ok
+    # Every setter must be refused -- including the two that can cost real
+    # damage, and the prefixed forms the HDS uses.
+    for bad in (
+        "s output res 8!",
+        "s input EDID 1!",
+        "reset!",
+        "s reset!",
+        "reboot!",
+        "s reboot!",
+        "power 0!",
+        "s power 0!",
+        "r output res",       # no terminator
+        "",
+    ):
+        assert not _is_read_only(bad), bad
