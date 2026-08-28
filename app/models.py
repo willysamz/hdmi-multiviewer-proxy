@@ -292,3 +292,22 @@ INPUT_NAMES = {
     3: "hdmi_3",
     4: "hdmi_4",
 }
+
+
+class RawCommandRequest(BaseModel):
+    """A raw RS-232 command to send to the device.
+
+    Deliberately read-only: see `app.routers.system.raw_command` for the
+    allowlist. Setters are rejected rather than forwarded.
+    """
+
+    command: str = Field(..., description="Raw command, e.g. 'help!' or 'r output res!'")
+
+
+class RawCommandResponse(BaseModel):
+    """The device's verbatim reply, unparsed."""
+
+    command: str
+    response: str | None = None
+    success: bool
+    error: str | None = None

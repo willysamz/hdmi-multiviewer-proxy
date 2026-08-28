@@ -10,6 +10,8 @@ from app.models import (
     ErrorResponse,
     PowerRequest,
     PowerResponse,
+    RawCommandRequest,
+    RawCommandResponse,
 )
 from app.serial_handler import ConnectionState as HandlerConnectionState
 
@@ -149,3 +151,51 @@ async def factory_reset() -> dict:
         "message": "Device reset to factory defaults",
         "response": response,
     }
+
+
+# Read-only allowlist for the raw diagnostic endpoint. `help!` lists the
+# device's own command set with parameter ranges -- the authoritative answer
+# for any protocol question, and the only way to interrogate a unit whose
+# serial line this proxy owns exclusively.
+_RAW_READ_PREFIXES = ("r ",)
+_RAW_READ_EXACT = ("help!",)
+
+
+def _is_read_only(command: str) -> bool:
+    c = command.strip().lower()
+    if not c.endswith("!"):
+        return False
+    return c in _RAW_READ_EXACT or c.startswith(_RAW_READ_PREFIXES)
+
+
+@router.post("/raw", response_model=RawCommandResponse)
+async def raw_command(request: RawCommandRequest) -> RawCommandResponse:
+    """Send a **read-only** raw RS-232 command and return the verbatim reply.
+
+    Diagnostics only. The allowlist accepts `help!` and anything starting with
+    `r ` -- every setter, `reboot` and `reset` included, is refused here rather
+    than forwarded, so this endpoint cannot change device state.
+
+    Not published over MQTT and never surfaced as an entity: it exists so a
+    protocol question can be answered by asking the device, instead of
+    inferring from a manual. The two models are not command-compatible and the
+    one command that was ever assumed rather than verified is the one that
+    broke production.
+    """
+    _check_device_available()
+    if not _is_read_only(request.command):
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="not_a_read_command",
+                message=(
+                    f"{request.command!r} is not read-only. This endpoint accepts "
+                    "'help!' and commands starting with 'r ' only."
+                ),
+            ).model_dump(),
+        )
+    handler = get_serial_handler()
+    success, response, error = await handler.send_command(request.command.strip())
+    return RawCommandResponse(
+        command=request.command.strip(), response=response, success=success, error=error
+    )

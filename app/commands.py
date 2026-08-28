@@ -365,6 +365,60 @@ class ResponseParser:
         return None
 
     @staticmethod
+    def parse_vka(response: str) -> str | None:
+        """Parse the video-keep-active pattern.
+
+        Device answers `output VKA pattern: black screen`.
+        """
+        low = response.lower()
+        if "black" in low:
+            return "black_screen"
+        if "blue" in low:
+            return "blue_screen"
+        return None
+
+    @staticmethod
+    def parse_window_border(response: str) -> bool | None:
+        """Parse the master window-border switch.
+
+        Captured from the live HDS: `window border off`.
+        """
+        low = response.lower()
+        if "window border on" in low:
+            return True
+        if "window border off" in low:
+            return False
+        return None
+
+    @staticmethod
+    def parse_source_osd(response: str) -> bool | None:
+        """Parse the source-OSD switch.
+
+        Captured from the live HDS: `window source osd:on` -- note the colon,
+        unlike the border switch which uses a space.
+        """
+        low = response.lower()
+        if "source osd:on" in low or "source osd on" in low:
+            return True
+        if "source osd:off" in low or "source osd off" in low:
+            return False
+        return None
+
+    @staticmethod
+    def parse_border_colors(response: str) -> dict[int, str]:
+        """Parse one or more `window N border color <name>` lines.
+
+        `r window 0 border color!` answers with all four windows on separate
+        lines, so this returns a map rather than a single value. Colour names
+        come back as words (`yellow`), never indices -- which is why the
+        select's options must be the names.
+        """
+        out: dict[int, str] = {}
+        for m in re.finditer(r"window\s+(\d)\s+border\s+color\s+(\w+)", response, re.IGNORECASE):
+            out[int(m.group(1))] = m.group(2).strip().lower()
+        return out
+
+    @staticmethod
     def parse_edid(response: str) -> str | None:
         """Parse an EDID-mode response.
 

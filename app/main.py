@@ -15,7 +15,15 @@ from app.controller import Controller, ControllerError
 from app.dependencies import set_serial_handler, set_startup_time
 from app.mqtt_client import MqttClient
 from app.poller import Poller
-from app.profiles import CAP_AUTO_SWITCH, CAP_EDID
+from app.profiles import (
+    CAP_AUTO_SWITCH,
+    CAP_EDID,
+    CAP_HDCP,
+    CAP_ITC,
+    CAP_SOURCE_OSD,
+    CAP_VKA,
+    CAP_WINDOW_BORDER,
+)
 from app.routers import audio, display, health, output, system
 from app.serial_handler import SerialHandler
 
@@ -120,6 +128,15 @@ _PIP_POSITION_SET_RE = re.compile(r"^[^/]+/pip/position/set$")
 _PIP_SIZE_SET_RE = re.compile(r"^[^/]+/pip/size/set$")
 _AUTO_SWITCH_SET_RE = re.compile(r"^[^/]+/auto_switch/set$")
 _EDID_SET_RE = re.compile(r"^[^/]+/edid/set$")
+_RESOLUTION_SET_RE = re.compile(r"^[^/]+/output/resolution/set$")
+_HDCP_SET_RE = re.compile(r"^[^/]+/output/hdcp/set$")
+_VKA_SET_RE = re.compile(r"^[^/]+/output/vka/set$")
+_VIDEO_MODE_SET_RE = re.compile(r"^[^/]+/output/video_mode/set$")
+_LAYOUT_SET_RE = re.compile(r"^[^/]+/(?P<layout>quad|pbp|triple)/(?P<kind>mode|aspect)/set$")
+_WINDOW_BORDER_SET_RE = re.compile(r"^[^/]+/window/border/set$")
+_BORDER_COLOR_SET_RE = re.compile(r"^[^/]+/window/(?P<n>[1-4])/border_color/set$")
+_SOURCE_OSD_SET_RE = re.compile(r"^[^/]+/window/source_osd/set$")
+_REBOOT_SET_RE = re.compile(r"^[^/]+/reboot/set$")
 
 
 async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_prefix: str) -> None:
@@ -145,6 +162,26 @@ async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_pr
         await mqtt.subscribe(f"{prefix}/auto_switch/set")
     if controller.profile.supports(CAP_EDID):
         await mqtt.subscribe(f"{prefix}/edid/set")
+    for sub in [
+        f"{prefix}/quad/+/set",
+        f"{prefix}/pbp/+/set",
+        f"{prefix}/triple/+/set",
+        f"{prefix}/reboot/set",
+    ]:
+        await mqtt.subscribe(sub)
+    if controller.profile.resolution_options:
+        await mqtt.subscribe(f"{prefix}/output/resolution/set")
+    if controller.profile.supports(CAP_HDCP):
+        await mqtt.subscribe(f"{prefix}/output/hdcp/set")
+    if controller.profile.supports(CAP_VKA):
+        await mqtt.subscribe(f"{prefix}/output/vka/set")
+    if controller.profile.supports(CAP_ITC):
+        await mqtt.subscribe(f"{prefix}/output/video_mode/set")
+    if controller.profile.supports(CAP_WINDOW_BORDER):
+        await mqtt.subscribe(f"{prefix}/window/border/set")
+        await mqtt.subscribe(f"{prefix}/window/+/border_color/set")
+    if controller.profile.supports(CAP_SOURCE_OSD):
+        await mqtt.subscribe(f"{prefix}/window/source_osd/set")
     log.info("command_subscriber_started", prefix=prefix)
 
     async for msg in mqtt.messages:
@@ -185,6 +222,24 @@ async def _command_subscriber(mqtt: MqttClient, controller: Controller, topic_pr
                 await controller.set_auto_switch(payload.upper())
             elif _EDID_SET_RE.match(topic_str):
                 await controller.set_edid(payload)
+            elif _RESOLUTION_SET_RE.match(topic_str):
+                await controller.set_output_resolution(payload)
+            elif _HDCP_SET_RE.match(topic_str):
+                await controller.set_hdcp(payload)
+            elif _VKA_SET_RE.match(topic_str):
+                await controller.set_vka(payload)
+            elif _VIDEO_MODE_SET_RE.match(topic_str):
+                await controller.set_video_mode(payload)
+            elif (m := _LAYOUT_SET_RE.match(topic_str)) is not None:
+                await getattr(controller, f"set_{m.group('layout')}_{m.group('kind')}")(payload)
+            elif _WINDOW_BORDER_SET_RE.match(topic_str):
+                await controller.set_window_border(payload.upper())
+            elif (m := _BORDER_COLOR_SET_RE.match(topic_str)) is not None:
+                await controller.set_border_color(int(m.group("n")), payload)
+            elif _SOURCE_OSD_SET_RE.match(topic_str):
+                await controller.set_source_osd(payload.upper())
+            elif _REBOOT_SET_RE.match(topic_str):
+                await controller.reboot()
             else:
                 log.warning("command_subscriber_unmatched_topic", topic=topic_str)
         except ControllerError as exc:
