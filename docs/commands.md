@@ -71,20 +71,31 @@ profiles exist. On the UHD the entire SYSTEM group (`power`, `reboot`,
 
 ## Compatibility matrix
 
+Both columns are from each device's own `help!`, with distinct-value counts
+confirmed by enumeration.
+
 | | UHD-401MV | HDS-401MV |
 |---|---|---|
 | power / reboot / reset | `power z!`, `reboot!`, `reset!` | `s power z!`, `s reboot!`, `s reset!` |
-| input EDID | `s input EDID x!`, x=1~18 | `s input edid x!`, x=1~7 |
-| output resolution | x=1~14 | x=1~4 |
+| input EDID | `s input EDID x!`, x=1~**19** | `s input edid x!`, x=1~7 |
+| user EDID upload | `s edid user1 …!` / `r edid user1!` | **absent** |
+| output resolution | x=1~**15** (15 = `AUTO`) | x=1~4 |
 | audio volume | yes | **absent** |
 | output HDCP / VKA / ITC | yes | **absent** |
 | `r status!` | absent | yes |
-| window border / border colour | absent | yes |
-| window source OSD | absent | yes |
+| **window border** | `s window x border y!` — **per window** | `s window border y!` — **global** |
+| **window border colour** | `s window x border color y!` | same command |
+| **window source OSD** | `s window source osd x!` | same command |
 | auto switch | yes | yes |
-| multiview / windows / in source / PIP / PBP / triple / quad | identical | identical |
+| multiview / windows / in source | identical | identical |
+| PIP position | accepts x=1~5, **4 distinct** | x=1~4 |
+| PIP size | accepts x=1~4, **3 distinct** | x=1~3 |
+| quad mode | accepts x=1~3, **2 distinct** | x=1~2 |
+| PBP / triple / quad aspect | identical | identical |
 
----
+Window border, border colour and source OSD are **not** HDS-only, despite being
+absent from the UHD manual. Only the border command's *shape* differs: the UHD
+addresses a window, the HDS switches all of them at once.
 
 # UHD-401MV
 
@@ -104,7 +115,7 @@ profiles exist. On the UHD the entire SYSTEM group (`power`, `reboot`,
 
 | Command | What it does |
 |---|---|
-| `s output res x!` | Output resolution, x=1~14 (table below). This is what the *display* receives; the scaler converts whatever the sources send. |
+| `s output res x!` | Output resolution, x=1~15 (table below; 15 = `AUTO`). This is what the *display* receives; the scaler converts whatever the sources send. |
 | `r output res!` | Current output resolution. |
 | `s output hdcp x!` | Which HDCP version the output advertises: 1=HDCP 1.4, 2=HDCP 2.2, 3=off. Lower it when a display or downstream splitter refuses to handshake at 2.2; protected sources may then refuse to play. |
 | `r output hdcp!` | Current HDCP mode. |
@@ -113,7 +124,7 @@ profiles exist. On the UHD the entire SYSTEM group (`power`, `reboot`,
 | `s output itc x!` | IT Content flag: 1=video mode, 2=PC mode. Tells the display how to treat the picture — video mode allows the display's video processing (smoothing, overscan); PC mode asks for 1:1 pixel mapping and usually lower latency. Set PC mode for text or gaming. |
 | `r output itc!` | Current video/PC mode. |
 
-### Resolution values (x=1~14)
+### Resolution values (x=1~15)
 
 | x | Resolution | | x | Resolution |
 |---|---|---|---|---|
@@ -124,12 +135,13 @@ profiles exist. On the UHD the entire SYSTEM group (`power`, `reboot`,
 | 5 | 3840x2160p30 | | 12 | 1280x720p60 |
 | 6 | 3840x2160p25 | | 13 | 1280x720p50 |
 | 7 | 1920x1200p60RB | | 14 | 1024x768p60 |
+| | | | **15** | **AUTO** *(inferred — see below)* |
 
 ## EDID
 
 | Command | What it does |
 |---|---|
-| `s input EDID x!` | x=1~18 (table below). Sets the EDID the multiviewer presents **to all four sources** — the capability block telling them what resolutions and audio formats the sink accepts. Sources pick their output format from this. |
+| `s input EDID x!` | x=1~19 (table below). Sets the EDID the multiviewer presents **to all four sources** — the capability block telling them what resolutions and audio formats the sink accepts. Sources pick their output format from this. |
 | `r input EDID!` | Current EDID mode. |
 
 **EDID is the usual cause of "picture works, audio doesn't" and "one source is
@@ -143,7 +155,7 @@ on pixels the scaler discards.
 Changing it renegotiates HDMI for every source at once, so a wrong value can
 black the display or kill audio system-wide.
 
-### EDID values (x=1~18)
+### EDID values (x=1~19)
 
 | x | Mode | | x | Mode |
 |---|---|---|---|---|
@@ -155,7 +167,8 @@ black the display or kill audio system-wide.
 | 6 | 4K2K30_444, HD Audio 7.1 | | 15 | 1280x1024, Stereo 2.0 |
 | 7 | 1080P, Stereo 2.0 | | 16 | 1024x768, Stereo 2.0 |
 | 8 | 1080P, Dolby/DTS 5.1 | | 17 | 720p, Stereo 2.0 |
-| 9 | 1080P, HD Audio 7.1 | | 18 | Copy from HDMI out |
+| 9 | 1080P,HD Audio 7.1 | | 18 | Copy from HDMI out |
+| | | | **19** | **USER1** *(the `s edid user1` slot)* |
 
 Mode 18 passes through the real display's own EDID — usually the safest choice
 when the display is the only sink.
@@ -199,6 +212,29 @@ when the display is the only sink.
 | `r PIP position!` | Current corner. |
 | `s PIP size x!` | Inset size: 1=small, 2=medium, 3=large. |
 | `r PIP size!` | Current size. |
+
+### Window borders and OSD
+
+Absent from the UHD manual, present in its firmware. Note the border command
+addresses **one window at a time**, unlike the HDS's global switch.
+
+| Command | What it does |
+|---|---|
+| `s window x border y!` | Border on/off for window x (1~4), y=0~1. Separates adjacent tiles in a multi-window layout. |
+| `r window x border!` | Border state; x=0 returns all four (`window 1 border off` …). |
+| `s window x border color y!` | Border colour of window x, y=1~9: black, red, green, blue, yellow, magenta, cyan, white, gray. Lets each tile be identified by colour. |
+| `r window x border color!` | Colour of window x; x=0 returns all four. Answers `window 1 border color:` with an **empty value when unset** — unlike the HDS, which returns the name. |
+| `s window source osd x!` | x=0~1. Labels each window with the input it is showing. |
+| `r window source osd!` | Current state, as `window source osd: off`. |
+
+### User EDID
+
+| Command | What it does |
+|---|---|
+| `s edid user1 00 FF FF …!` | Uploads a raw EDID blob as the user-defined mode. Not an index — a hex payload — so it is not exposed as an HA entity. |
+| `r edid user1!` | Reads the stored user EDID back. |
+
+Selecting EDID mode **19 (`USER1`)** is what activates whatever this holds.
 
 ### PBP / triple / quad
 
@@ -345,44 +381,26 @@ later reads the old value and looks like the same failure.
 Control is **MQTT** (discovery entities plus command/state topics). The REST
 API is internal and used for diagnostics only.
 
-As of **0.5.0 every settable command is exposed** except two:
+**Every settable command is exposed** as of 0.6.1 — 36 entities on the UHD, 29
+on the HDS, capability-gated so neither model sees the other's — with three
+deliberate exceptions:
 
-- **`reset`** — deliberately never published. It discards the serial baud rate
-  along with the layout, which costs all serial control until it is corrected
-  through the OSD. Reachable on the REST API only.
+- **`reset`** — never published. It discards the serial baud rate along with
+  the layout, which costs all serial control until corrected through the OSD.
+  Reachable on the REST API only.
+- **`s edid user1 …!`** — takes a raw hex EDID blob, not an index, so it has no
+  sensible select or switch representation. REST only.
 - **`r status!`** — a combined dump of values the poller already reads
-  individually, so it would be a redundant sensor rather than a control.
+  individually; a redundant sensor rather than a control.
 
-One partial: the **HDS output resolution** accepts x=1~4 but names those values
-nowhere, and the device reports real resolution strings (`1920x1080p60`). An
-index-labelled select would publish a state matching no option, so the HDS keeps
-its read-only resolution *sensor* until the four names are captured. The UHD
-gets a full 14-option select.
+Three further values are **accepted by the device but not offered**, because
+enumeration showed they alias the previous value rather than doing anything:
+quad mode 3, PIP position 5, PIP size 4. Offering them would be a control that
+silently does nothing.
 
-Similarly, the UHD may report `AUTO`, which is not settable over RS-232. The
-resolution **sensor** always shows the device's truth including `AUTO`; the
-**select** offers only the 14 values that can actually be set, and publishes no
-state while the device is on `AUTO`.
-
-## Asking the device directly
-
-`POST /api/raw` sends a **read-only** raw command and returns the verbatim
-reply. The allowlist accepts `help!` and anything starting with `r `; every
-setter — `reboot` and `reset` included — is refused rather than forwarded, so
-the endpoint cannot change device state. It is REST-only and never published
-over MQTT.
-
-```bash
-curl -s -X POST http://hdmi-multiviewer-proxy:8080/api/raw \
-  -H 'Content-Type: application/json' \
-  -d '{"command":"help!"}'
-```
-
-**`help!` is the authoritative answer to any protocol question** — it lists the
-device's own command set with parameter ranges, which is how the HDS's 46
-commands in this document were obtained. Use it in preference to this file or
-any manual when the two disagree; firmware wins.
-
-It exists because a unit whose serial line the proxy owns exclusively is
-otherwise uninterrogable. The HDS could be reached over its ESPHome TCP bridge;
-the UHD could not be reached at all.
+Two label sets remain unknown, both HDS: its **7 EDID modes** and **4 output
+resolutions** are named nowhere, and the device reports real strings for both.
+So HDS EDID sets correctly but cannot display its current mode (a diagnostic
+**sensor** carries the real value instead), and HDS resolution gets **no
+select** — the proxy refuses rather than guessing a label-to-index mapping.
+The UHD has neither problem: its labels are verified against device output.
