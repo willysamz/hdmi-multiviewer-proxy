@@ -118,11 +118,22 @@ class Poller:
         # roughly double the serial traffic on a 115200 line for no benefit.
         # They are refreshed every SLOW_POLL_EVERY cycles instead.
         self._cycle = 0
+        # Set by trigger_immediate_poll so the nudged cycle reads the
+        # config-class group too. Consumed at the top of poll_once.
+        self._force_slow = False
         # Per-topic last-published cache so we publish deltas only.
         self._last: dict[str, str] = {}
 
     def trigger_immediate_poll(self) -> None:
-        """Skip the sleep on the next iteration and poll right now."""
+        """Poll right now, reading every group including the config-class one.
+
+        A command can change any entity, and roughly a third of them live in
+        the slow group. Nudging without forcing `slow` left those confirming
+        only at the next SLOW_POLL_EVERY boundary -- up to a minute later --
+        during which HA kept showing the pre-command value and the toggle
+        appeared to spring back.
+        """
+        self._force_slow = True
         self._immediate_event.set()
 
     async def start(self) -> None:
@@ -139,12 +150,15 @@ class Poller:
     async def _run(self) -> None:
         await asyncio.sleep(2)
         while not self._stop_event.is_set():
+            # Cleared before the poll, never after: a command landing while
+            # poll_once is in flight would otherwise have its nudge wiped and
+            # wait a full poll_interval for confirmation.
+            self._immediate_event.clear()
             try:
                 await self.poll_once()
             except Exception as exc:
                 log.warning("poll_cycle_failed", error=str(exc))
 
-            self._immediate_event.clear()
             stop_task = asyncio.create_task(self._stop_event.wait())
             immediate_task = asyncio.create_task(self._immediate_event.wait())
             done, pending = await asyncio.wait(
@@ -162,7 +176,8 @@ class Poller:
     async def poll_once(self) -> None:
         """One cycle: query each entity group + publish deltas."""
         self._cycle += 1
-        slow = self._cycle == 1 or self._cycle % self.SLOW_POLL_EVERY == 0
+        slow = self._force_slow or self._cycle == 1 or self._cycle % self.SLOW_POLL_EVERY == 0
+        self._force_slow = False
         # Always publish discovery on first cycle (even if some queries fail).
         if not self._discovery_published:
             await self._publish_discovery()
