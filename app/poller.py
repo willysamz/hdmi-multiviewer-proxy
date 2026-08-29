@@ -121,6 +121,10 @@ class Poller:
         # Set by trigger_immediate_poll so the nudged cycle reads the
         # config-class group too. Consumed at the top of poll_once.
         self._force_slow = False
+        # Bumped by every command. A sweep stamps its publishes with the value
+        # current when it started, so reads taken before a command can never
+        # overwrite what that command's read-back published.
+        self._generation = 0
         # Per-topic last-published cache so we publish deltas only.
         self._last: dict[str, str] = {}
 
@@ -134,6 +138,7 @@ class Poller:
         appeared to spring back.
         """
         self._force_slow = True
+        self._generation += 1
         self._immediate_event.set()
 
     async def start(self) -> None:
@@ -178,6 +183,15 @@ class Poller:
         self._cycle += 1
         slow = self._force_slow or self._cycle == 1 or self._cycle % self.SLOW_POLL_EVERY == 0
         self._force_slow = False
+        # A command handled on the subscriber task publishes the setting it
+        # changed straight away. This sweep runs on the poller task and may
+        # already hold reads taken BEFORE that command, so anything it
+        # publishes afterwards would be stale and overwrite the fresh value --
+        # the entity would show the new value, snap back, then correct on the
+        # next sweep. Every publish below is stamped with the generation
+        # current at entry and dropped once a command supersedes it.
+        gen = self._generation
+
         # Always publish discovery on first cycle (even if some queries fail).
         if not self._discovery_published:
             await self._publish_discovery()
@@ -187,7 +201,9 @@ class Poller:
 
         # Connectivity: derived from the serial handler's state property.
         connected = self.serial.state == ConnectionState.ON
-        await self._publish_delta(f"{prefix}/connected/state", "ON" if connected else "OFF")
+        await self._publish_delta(
+            f"{prefix}/connected/state", "ON" if connected else "OFF", gen=gen
+        )
 
         # Power comes from the device's own `r power!` answer, and ONLY from
         # that. The read is gated on the LIVE transport status (is_connected)
@@ -197,11 +213,11 @@ class Poller:
         if self.serial.is_connected:
             power = await self._read(self.profile.GET_POWER, ResponseParser.parse_power)
         if power is not None:
-            await self._publish_delta(f"{prefix}/power/state", "ON" if power else "OFF")
+            await self._publish_delta(f"{prefix}/power/state", "ON" if power else "OFF", gen=gen)
         elif not self.serial.is_connected:
             # Transport is down: report OFF. Deliberate fail-safe so automations
             # that gate on power never act on a device we cannot reach.
-            await self._publish_delta(f"{prefix}/power/state", "OFF")
+            await self._publish_delta(f"{prefix}/power/state", "OFF", gen=gen)
         # Remaining case: the socket claims to be open but the read failed, so
         # we do NOT know the power state -- publish nothing and let the last
         # value stand. This branch used to assume "socket up -> ON". On
@@ -214,150 +230,369 @@ class Poller:
         if not connected:
             return
 
-        # Mode
+        # From here on, bail out as soon as a command supersedes this sweep:
+        # its remaining reads would contend with that command's own traffic on
+        # the serial line and then be dropped at publish time anyway.
+        if gen != self._generation:
+            return
+        await self.refresh_mode(gen=gen)
+        for n in range(1, 5):
+            await self.refresh_window(n, gen=gen)
+        if gen != self._generation:
+            return
+        await self.refresh_input_source(gen=gen)
+        await self.refresh_audio_source(gen=gen)
+        await self.refresh_audio_volume(gen=gen)
+        await self.refresh_audio_muted(gen=gen)
+        await self.refresh_pip_position(gen=gen)
+        await self.refresh_pip_size(gen=gen)
+        if gen != self._generation:
+            return
+        await self.refresh_auto_switch(gen=gen)
+        await self.refresh_edid(gen=gen)
+        await self.refresh_resolution(gen=gen)
+
+        if slow:
+            await self._poll_config_settings(gen=gen)
+
+    async def _poll_config_settings(self, *, gen: int | None = None) -> None:
+        """Read the rarely-changing settings. Runs every SLOW_POLL_EVERY cycles.
+
+        Reading these every cycle would roughly double the serial traffic on a
+        115200 line for no benefit, so the sweep visits them on a boundary --
+        or whenever a command forces it.
+        """
+        if gen is not None and gen != self._generation:
+            return
+        await self.refresh_hdcp(gen=gen)
+        await self.refresh_vka(gen=gen)
+        await self.refresh_video_mode(gen=gen)
+        for layout in ("quad", "pbp", "triple"):
+            if gen is not None and gen != self._generation:
+                return
+            await self.refresh_layout_mode(layout, gen=gen)
+            await self.refresh_layout_aspect(layout, gen=gen)
+        if gen is not None and gen != self._generation:
+            return
+        await self.refresh_window_border(gen=gen)
+        await self.refresh_border_colors(gen=gen)
+        await self.refresh_source_osd(gen=gen)
+
+    # ---- per-setting refreshers ------------------------------------------
+    #
+    # Each reads ONE setting and publishes its topic(s). The sweep above walks
+    # them in order; Controller._send calls the single one its command changed
+    # so a set confirms in one round trip instead of waiting out the sweep.
+    # Each setting's command, value mapping and topic therefore live in one
+    # place on the MQTT path. (The REST routers are a separate path: they call
+    # the serial handler directly with the legacy Commands class and publish
+    # nothing.)
+    #
+    # `force` bypasses the change-detection cache. After a command HA needs a
+    # message even when the value is unchanged -- that is exactly the case
+    # where the device IGNORED the write, and silence there would leave HA's
+    # optimistic toggle to revert with no correction.
+
+    @property
+    def _prefix(self) -> str:
+        return self.settings.mqtt_topic_prefix.strip("/")
+
+    async def refresh_mode(self, *, gen: int | None = None, force: bool = False) -> None:
         mode = await self._read(self.profile.GET_MULTIVIEW, ResponseParser.parse_multiview_mode)
         if mode is not None:
-            await self._publish_delta(f"{prefix}/mode/state", mode)
+            await self._publish_delta(f"{self._prefix}/mode/state", mode, gen=gen, force=force)
 
-        # Windows 1..4
-        for n in range(1, 5):
-            cmd = self.profile.GET_WINDOW_INPUT.format(x=n)
-            window_in = await self._read(cmd, ResponseParser.parse_window_input)
-            if window_in is not None:
-                await self._publish_delta(f"{prefix}/windows/{n}/state", f"HDMI {window_in}")
+    async def refresh_window(
+        self, window_n: int, *, gen: int | None = None, force: bool = False
+    ) -> None:
+        cmd = self.profile.GET_WINDOW_INPUT.format(x=window_n)
+        window_in = await self._read(cmd, ResponseParser.parse_window_input)
+        if window_in is not None:
+            await self._publish_delta(
+                f"{self._prefix}/windows/{window_n}/state",
+                f"HDMI {window_in}",
+                gen=gen,
+                force=force,
+            )
 
-        # Single-screen input source (drives single mode; s in source)
+    async def refresh_input_source(self, *, gen: int | None = None, force: bool = False) -> None:
         in_src = await self._read(self.profile.GET_INPUT_SOURCE, ResponseParser.parse_input_source)
         if in_src is not None:
-            await self._publish_delta(f"{prefix}/input/source/state", f"HDMI {in_src}")
+            await self._publish_delta(
+                f"{self._prefix}/input/source/state", f"HDMI {in_src}", gen=gen, force=force
+            )
 
-        # Audio source / volume / mute
+    async def refresh_audio_source(self, *, gen: int | None = None, force: bool = False) -> None:
         audio_src = await self._read(
             self.profile.GET_AUDIO_SOURCE, ResponseParser.parse_audio_source
         )
         if audio_src is not None:
             name = _AUDIO_SOURCE_CODE_TO_NAME.get(audio_src, f"HDMI {audio_src}")
-            await self._publish_delta(f"{prefix}/audio/source/state", name)
+            await self._publish_delta(
+                f"{self._prefix}/audio/source/state", name, gen=gen, force=force
+            )
 
-        vol = (
-            await self._read(self.profile.GET_AUDIO_VOL, ResponseParser.parse_volume)
-            if self.profile.supports(CAP_VOLUME)
-            else None
-        )
+    async def refresh_audio_volume(self, *, gen: int | None = None, force: bool = False) -> None:
+        if not self.profile.supports(CAP_VOLUME):
+            return
+        vol = await self._read(self.profile.GET_AUDIO_VOL, ResponseParser.parse_volume)
         if vol is not None:
-            await self._publish_delta(f"{prefix}/audio/volume/state", str(vol))
+            await self._publish_delta(
+                f"{self._prefix}/audio/volume/state", str(vol), gen=gen, force=force
+            )
 
+    async def refresh_audio_muted(self, *, gen: int | None = None, force: bool = False) -> None:
         muted = await self._read(self.profile.GET_AUDIO_MUTE, ResponseParser.parse_mute)
         if muted is not None:
-            await self._publish_delta(f"{prefix}/audio/muted/state", "ON" if muted else "OFF")
+            await self._publish_delta(
+                f"{self._prefix}/audio/muted/state", "ON" if muted else "OFF", gen=gen, force=force
+            )
 
-        # PIP position + size
+    async def refresh_pip_position(self, *, gen: int | None = None, force: bool = False) -> None:
         pip_pos = await self._read(self.profile.GET_PIP_POSITION, ResponseParser.parse_pip_position)
         if pip_pos is not None:
             pos_name = _PIP_POSITION_TO_NAME.get(pip_pos)
             if pos_name:
-                await self._publish_delta(f"{prefix}/pip/position/state", pos_name)
+                await self._publish_delta(
+                    f"{self._prefix}/pip/position/state", pos_name, gen=gen, force=force
+                )
 
+    async def refresh_pip_size(self, *, gen: int | None = None, force: bool = False) -> None:
         pip_sz = await self._read(self.profile.GET_PIP_SIZE, ResponseParser.parse_pip_size)
         if pip_sz is not None:
             size_name = _PIP_SIZE_TO_NAME.get(pip_sz)
             if size_name:
-                await self._publish_delta(f"{prefix}/pip/size/state", size_name)
+                await self._publish_delta(
+                    f"{self._prefix}/pip/size/state", size_name, gen=gen, force=force
+                )
 
-        # Resolution
-        if self.profile.supports(CAP_AUTO_SWITCH):
-            auto = await self._read(self.profile.GET_AUTO_SWITCH, ResponseParser.parse_auto_switch)
-            if auto is not None:
-                await self._publish_delta(f"{prefix}/auto_switch/state", "ON" if auto else "OFF")
+    async def refresh_auto_switch(self, *, gen: int | None = None, force: bool = False) -> None:
+        if not self.profile.supports(CAP_AUTO_SWITCH):
+            return
+        auto = await self._read(self.profile.GET_AUTO_SWITCH, ResponseParser.parse_auto_switch)
+        if auto is not None:
+            await self._publish_delta(
+                f"{self._prefix}/auto_switch/state", "ON" if auto else "OFF", gen=gen, force=force
+            )
 
-        if self.profile.supports(CAP_EDID):
-            edid = await self._read(self.profile.GET_INPUT_EDID, ResponseParser.parse_edid)
-            if edid is not None:
-                # Publish only a value the select actually offers. HA rejects a
-                # state absent from options[] and logs an error every time --
-                # and the HDS reports real mode NAMES (`copy from hdmi out`)
-                # while its option list is still generic, so an unguarded
-                # publish would error on every poll.
-                if self.profile.edid_options_verified:
-                    match = next(
-                        (o for o in self.profile.edid_options if o.lower() == edid.strip().lower()),
-                        None,
-                    )
-                    if match:
-                        await self._publish_delta(f"{prefix}/edid/state", match)
-                else:
-                    # Real value, unmatched label set -- surface it verbatim on
-                    # the diagnostic sensor rather than discarding it.
-                    await self._publish_delta(f"{prefix}/edid/mode/state", edid)
+    async def refresh_edid(self, *, gen: int | None = None, force: bool = False) -> None:
+        """One read, but one of TWO topics.
 
+        Publish only a value the select actually offers: HA rejects a state
+        absent from options[] and logs an error every time -- and the HDS
+        reports real mode NAMES (`copy from hdmi out`) while its option list is
+        still generic, so an unguarded publish would error on every poll. When
+        the labels are unverified the real value goes to the diagnostic sensor
+        instead of being discarded.
+        """
+        if not self.profile.supports(CAP_EDID):
+            return
+        edid = await self._read(self.profile.GET_INPUT_EDID, ResponseParser.parse_edid)
+        if edid is None:
+            return
+        if self.profile.edid_options_verified:
+            match = next(
+                (o for o in self.profile.edid_options if o.lower() == edid.strip().lower()),
+                None,
+            )
+            if match:
+                await self._publish_delta(f"{self._prefix}/edid/state", match, gen=gen, force=force)
+        else:
+            await self._publish_delta(f"{self._prefix}/edid/mode/state", edid, gen=gen, force=force)
+
+    async def refresh_resolution(self, *, gen: int | None = None, force: bool = False) -> None:
+        """One read, TWO topics: the select and the raw diagnostic sensor.
+
+        The select can only offer settable values; the device may report AUTO,
+        which is not one of them. Publish the select's state only when it maps
+        to an option, so HA never shows an invalid state -- the sensor always
+        carries the verbatim value.
+        """
         res = await self._read(self.profile.GET_OUTPUT_RES, ResponseParser.parse_resolution)
-        if res is not None and self.profile.resolution_options:
-            # The select can only offer settable values; the device may report
-            # AUTO, which is not one of them. Publish the select's state only
-            # when it maps to an option, so HA never shows an invalid state.
+        if res is None:
+            return
+        if self.profile.resolution_options:
             match = next(
                 (o for o in self.profile.resolution_options if o.lower() == res.strip().lower()),
                 None,
             )
             if match:
-                await self._publish_delta(f"{prefix}/output/resolution/select/state", match)
-
-        if slow:
-            await self._poll_config_settings(prefix)
-
-        if res is not None:
-            await self._publish_delta(f"{prefix}/output/resolution/state", res)
-
-    async def _poll_config_settings(self, prefix: str) -> None:
-        """Read the rarely-changing settings. Runs every SLOW_POLL_EVERY cycles."""
-        if self.profile.supports(CAP_HDCP):
-            v = await self._read(self.profile.GET_OUTPUT_HDCP, ResponseParser.parse_hdcp)
-            name = {"hdcp_1_4": "HDCP 1.4", "hdcp_2_2": "HDCP 2.2", "off": "Off"}.get(v or "")
-            if name:
-                await self._publish_delta(f"{prefix}/output/hdcp/state", name)
-
-        if self.profile.supports(CAP_VKA):
-            v = await self._read(self.profile.GET_OUTPUT_VKA, ResponseParser.parse_vka)
-            name = {"black_screen": "Black screen", "blue_screen": "Blue screen"}.get(v or "")
-            if name:
-                await self._publish_delta(f"{prefix}/output/vka/state", name)
-
-        if self.profile.supports(CAP_ITC):
-            v = await self._read(self.profile.GET_OUTPUT_ITC, ResponseParser.parse_video_mode)
-            name = {"video": "Video", "pc": "PC"}.get(v or "")
-            if name:
-                await self._publish_delta(f"{prefix}/output/video_mode/state", name)
-
-        for layout, mode_cmd, aspect_cmd in (
-            ("quad", self.profile.GET_QUAD_MODE, self.profile.GET_QUAD_ASPECT),
-            ("pbp", self.profile.GET_PBP_MODE, self.profile.GET_PBP_ASPECT),
-            ("triple", self.profile.GET_TRIPLE_MODE, self.profile.GET_TRIPLE_ASPECT),
-        ):
-            m = await self._read(mode_cmd, ResponseParser.parse_pbp_mode)
-            if m in (1, 2):
                 await self._publish_delta(
-                    f"{prefix}/{layout}/mode/state", LAYOUT_MODE_OPTIONS[m - 1]
+                    f"{self._prefix}/output/resolution/select/state", match, gen=gen, force=force
                 )
-            a = await self._read(aspect_cmd, ResponseParser.parse_aspect)
-            name = {"full_screen": ASPECT_OPTIONS[0], "16_9": ASPECT_OPTIONS[1]}.get(a or "")
-            if name:
-                await self._publish_delta(f"{prefix}/{layout}/aspect/state", name)
+        await self._publish_delta(
+            f"{self._prefix}/output/resolution/state", res, gen=gen, force=force
+        )
 
-        if self.profile.supports(CAP_WINDOW_BORDER):
-            b = await self._read(self.profile.GET_WINDOW_BORDER, ResponseParser.parse_window_border)
-            if b is not None:
-                await self._publish_delta(f"{prefix}/window/border/state", "ON" if b else "OFF")
-            colors = await self._read(
-                self.profile.GET_ALL_WINDOW_BORDER_COLORS, ResponseParser.parse_border_colors
+    async def refresh_hdcp(self, *, gen: int | None = None, force: bool = False) -> None:
+        if not self.profile.supports(CAP_HDCP):
+            return
+        v = await self._read(self.profile.GET_OUTPUT_HDCP, ResponseParser.parse_hdcp)
+        name = {"hdcp_1_4": "HDCP 1.4", "hdcp_2_2": "HDCP 2.2", "off": "Off"}.get(v or "")
+        if name:
+            await self._publish_delta(
+                f"{self._prefix}/output/hdcp/state", name, gen=gen, force=force
             )
-            for n, name in (colors or {}).items():
-                if name in BORDER_COLORS:
-                    await self._publish_delta(f"{prefix}/window/{n}/border_color/state", name)
 
-        if self.profile.supports(CAP_SOURCE_OSD):
-            v = await self._read(self.profile.GET_SOURCE_OSD, ResponseParser.parse_source_osd)
-            if v is not None:
-                await self._publish_delta(f"{prefix}/window/source_osd/state", "ON" if v else "OFF")
+    async def refresh_vka(self, *, gen: int | None = None, force: bool = False) -> None:
+        if not self.profile.supports(CAP_VKA):
+            return
+        v = await self._read(self.profile.GET_OUTPUT_VKA, ResponseParser.parse_vka)
+        name = {"black_screen": "Black screen", "blue_screen": "Blue screen"}.get(v or "")
+        if name:
+            await self._publish_delta(
+                f"{self._prefix}/output/vka/state", name, gen=gen, force=force
+            )
+
+    async def refresh_video_mode(self, *, gen: int | None = None, force: bool = False) -> None:
+        if not self.profile.supports(CAP_ITC):
+            return
+        v = await self._read(self.profile.GET_OUTPUT_ITC, ResponseParser.parse_video_mode)
+        name = {"video": "Video", "pc": "PC"}.get(v or "")
+        if name:
+            await self._publish_delta(
+                f"{self._prefix}/output/video_mode/state", name, gen=gen, force=force
+            )
+
+    _LAYOUT_COMMANDS = {
+        "quad": ("GET_QUAD_MODE", "GET_QUAD_ASPECT"),
+        "pbp": ("GET_PBP_MODE", "GET_PBP_ASPECT"),
+        "triple": ("GET_TRIPLE_MODE", "GET_TRIPLE_ASPECT"),
+    }
+
+    async def refresh_layout_mode(
+        self, layout: str, *, gen: int | None = None, force: bool = False
+    ) -> None:
+        cmd = getattr(self.profile, self._LAYOUT_COMMANDS[layout][0])
+        m = await self._read(cmd, ResponseParser.parse_pbp_mode)
+        if m in (1, 2):
+            await self._publish_delta(
+                f"{self._prefix}/{layout}/mode/state",
+                LAYOUT_MODE_OPTIONS[m - 1],
+                gen=gen,
+                force=force,
+            )
+
+    async def refresh_layout_aspect(
+        self, layout: str, *, gen: int | None = None, force: bool = False
+    ) -> None:
+        cmd = getattr(self.profile, self._LAYOUT_COMMANDS[layout][1])
+        a = await self._read(cmd, ResponseParser.parse_aspect)
+        name = {"full_screen": ASPECT_OPTIONS[0], "16_9": ASPECT_OPTIONS[1]}.get(a or "")
+        if name:
+            await self._publish_delta(
+                f"{self._prefix}/{layout}/aspect/state", name, gen=gen, force=force
+            )
+
+    async def refresh_window_border(self, *, gen: int | None = None, force: bool = False) -> None:
+        """Border on/off, from the global `r window border!`.
+
+        KNOWN GAP, deliberately not fixed here: the UHD sets borders per window
+        and discovery gives it four switches on `window/{n}/border/state`, which
+        nothing publishes -- so those four never receive state at all. The
+        obvious fix is `GET_ALL_WINDOW_BORDERS` with `parse_window_borders`, but
+        that parser's own docstring records that the UHD's reply format has
+        never been captured, and the unit was powered off when this was written.
+        Shipping a guess would either publish nothing (no better) or spend a
+        full serial timeout per sweep on a command the UHD may not answer.
+        Capture the real reply on the powered-on UHD first.
+        """
+        if not self.profile.supports(CAP_WINDOW_BORDER):
+            return
+        b = await self._read(self.profile.GET_WINDOW_BORDER, ResponseParser.parse_window_border)
+        if b is not None:
+            await self._publish_delta(
+                f"{self._prefix}/window/border/state", "ON" if b else "OFF", gen=gen, force=force
+            )
+
+    async def refresh_border_colors(self, *, gen: int | None = None, force: bool = False) -> None:
+        """One read, up to FOUR topics -- `r window 0 border color!` answers
+        for every window, so a change to one still refreshes all four."""
+        if not self.profile.supports(CAP_WINDOW_BORDER):
+            return
+        colors = await self._read(
+            self.profile.GET_ALL_WINDOW_BORDER_COLORS, ResponseParser.parse_border_colors
+        )
+        for n, name in (colors or {}).items():
+            if name in BORDER_COLORS:
+                await self._publish_delta(
+                    f"{self._prefix}/window/{n}/border_color/state", name, gen=gen, force=force
+                )
+
+    async def refresh_source_osd(self, *, gen: int | None = None, force: bool = False) -> None:
+        if not self.profile.supports(CAP_SOURCE_OSD):
+            return
+        v = await self._read(self.profile.GET_SOURCE_OSD, ResponseParser.parse_source_osd)
+        if v is not None:
+            await self._publish_delta(
+                f"{self._prefix}/window/source_osd/state",
+                "ON" if v else "OFF",
+                gen=gen,
+                force=force,
+            )
+
+    async def refresh(self, key: str) -> None:
+        """Read+publish the single setting `key` names, forcing the publish.
+
+        Called by Controller._send straight after a successful write. Raises
+        on an unknown key -- but note _send catches that and logs it, because
+        a command that already succeeded must not be reported as failed and
+        the sweep nudge must still fire. So the real guard against a typo is
+        the test that resolves every key each setter emits, not this raise.
+        """
+        target, arg = self._resolve_refresh(key)
+        # Supersede any sweep in flight BEFORE publishing, not after. A sweep
+        # sitting between its own read and its publish has already passed its
+        # generation check, so bumping afterwards would let its stale value
+        # land on top of the value we are about to publish.
+        self._generation += 1
+        # Gate on the LIVE transport, not `serial.state`: that is written only
+        # by the heartbeat, so for up to heartbeat_interval after a power-on it
+        # still reads OFF -- and every read-back in that window would publish
+        # nothing, exactly when someone is most likely pressing buttons. A read
+        # against a powered-off device simply returns None and publishes
+        # nothing, so this gate only has to exclude a dead transport.
+        if not self.serial.is_connected:
+            return
+        if arg is None:
+            await target(force=True)
+        else:
+            await target(arg, force=True)
+
+    def _resolve_refresh(self, key: str) -> tuple[Any, Any]:
+        """Map a refresh key to its bound refresher and optional argument."""
+        if key.startswith("window:"):
+            return self.refresh_window, int(key.split(":", 1)[1])
+        if key.startswith("layout:"):
+            _, layout, kind = key.split(":")
+            if layout not in self._LAYOUT_COMMANDS:
+                raise ValueError(f"unknown layout in refresh key: {key!r}")
+            if kind == "mode":
+                return self.refresh_layout_mode, layout
+            if kind == "aspect":
+                return self.refresh_layout_aspect, layout
+            raise ValueError(f"unknown layout kind in refresh key: {key!r}")
+        simple = {
+            "mode": self.refresh_mode,
+            "input_source": self.refresh_input_source,
+            "audio_source": self.refresh_audio_source,
+            "audio_volume": self.refresh_audio_volume,
+            "audio_muted": self.refresh_audio_muted,
+            "pip_position": self.refresh_pip_position,
+            "pip_size": self.refresh_pip_size,
+            "auto_switch": self.refresh_auto_switch,
+            "edid": self.refresh_edid,
+            "resolution": self.refresh_resolution,
+            "hdcp": self.refresh_hdcp,
+            "vka": self.refresh_vka,
+            "video_mode": self.refresh_video_mode,
+            "window_border": self.refresh_window_border,
+            "border_colors": self.refresh_border_colors,
+            "source_osd": self.refresh_source_osd,
+        }
+        if key not in simple:
+            raise ValueError(f"unknown refresh key: {key!r}")
+        return simple[key], None
 
     async def _read(self, command: str, parser):
         """Issue a serial command and parse the response. Returns None on
@@ -371,12 +606,38 @@ class Poller:
             log.warning("parse_failed", command=command, error=str(exc))
             return None
 
-    async def _publish_delta(self, topic: str, value: str) -> None:
-        """Publish only when the value has changed since the last cycle."""
-        if self._last.get(topic) == value:
+    async def _publish_delta(
+        self, topic: str, value: str, *, gen: int | None = None, force: bool = False
+    ) -> None:
+        """Publish when the value changed -- or unconditionally when forced.
+
+        `gen` stamps a sweep's publishes: once a command bumps the generation
+        the sweep's remaining reads are older than the command and must not
+        overwrite what the command's own read-back published.
+
+        The cache is written BEFORE the await, not after: with two tasks
+        publishing, a check-then-await-then-assign guard can be interleaved.
+        It is rolled back if the publish fails, so a dropped message never
+        suppresses a later retry of the same value.
+        """
+        if gen is not None and gen != self._generation:
             return
-        await self.mqtt.publish(topic, value, retain=True)
+        if not force and self._last.get(topic) == value:
+            return
+        previous = self._last.get(topic)
         self._last[topic] = value
+        try:
+            await self.mqtt.publish(topic, value, retain=True)
+        except Exception:
+            # Only roll back if nothing else published this topic meanwhile,
+            # so a concurrent publisher's value is never overwritten by a
+            # stale snapshot.
+            if self._last.get(topic) == value:
+                if previous is None:
+                    self._last.pop(topic, None)
+                else:
+                    self._last[topic] = previous
+            raise
 
     async def _publish_discovery(self) -> None:
         """Emit HA discovery payloads for every entity (retained)."""

@@ -117,7 +117,11 @@ class Controller:
             raise ControllerError(
                 f"invalid mode payload: {payload!r} (expected one of {sorted(_MODE_MAP)})"
             )
-        await self._send(self.profile.SET_MULTIVIEW.format(x=int(mode)), f"set mode={payload}")
+        await self._send(
+            self.profile.SET_MULTIVIEW.format(x=int(mode)),
+            f"set mode={payload}",
+            refresh="mode",
+        )
 
     async def set_window_input(self, window_n: int, payload: str) -> None:
         if not 1 <= window_n <= 4:
@@ -128,6 +132,7 @@ class Controller:
         await self._send(
             self.profile.SET_WINDOW_INPUT.format(x=window_n, y=int(hdmi)),
             f"set window={window_n} input={payload}",
+            refresh=f"window:{window_n}",
         )
 
     async def set_input_source(self, payload: str) -> None:
@@ -137,6 +142,7 @@ class Controller:
         await self._send(
             self.profile.SET_INPUT_SOURCE.format(x=int(hdmi)),
             f"set input_source={payload}",
+            refresh="input_source",
         )
 
     async def set_audio_source(self, payload: str) -> None:
@@ -146,7 +152,9 @@ class Controller:
                 f"invalid audio source: {payload!r} (expected Follow Window 1 or HDMI 1..4)"
             )
         await self._send(
-            self.profile.SET_AUDIO_SOURCE.format(x=int(src)), f"set audio_source={payload}"
+            self.profile.SET_AUDIO_SOURCE.format(x=int(src)),
+            f"set audio_source={payload}",
+            refresh="audio_source",
         )
 
     async def set_audio_volume(self, payload: str) -> None:
@@ -158,13 +166,21 @@ class Controller:
             raise ControllerError(f"invalid volume payload: {payload!r}") from exc
         if not 0 <= vol <= 100:
             raise ControllerError(f"volume out of range: {vol}")
-        await self._send(self.profile.SET_AUDIO_VOL.format(x=vol), f"set audio_volume={vol}")
+        await self._send(
+            self.profile.SET_AUDIO_VOL.format(x=vol),
+            f"set audio_volume={vol}",
+            refresh="audio_volume",
+        )
 
     async def set_audio_mute(self, payload: str) -> None:
         if payload == "ON":
-            await self._send(self.profile.SET_AUDIO_MUTE.format(x=1), "set mute=on")
+            await self._send(
+                self.profile.SET_AUDIO_MUTE.format(x=1), "set mute=on", refresh="audio_muted"
+            )
         elif payload == "OFF":
-            await self._send(self.profile.SET_AUDIO_MUTE.format(x=0), "set mute=off")
+            await self._send(
+                self.profile.SET_AUDIO_MUTE.format(x=0), "set mute=off", refresh="audio_muted"
+            )
         else:
             raise ControllerError(f"invalid mute payload: {payload!r}")
 
@@ -173,11 +189,19 @@ class Controller:
         # its manual documents 4, so a hardcoded map would make the fifth
         # position unreachable.
         x = self._index_of(self.profile.pip_position_options, payload, "PIP position")
-        await self._send(self.profile.SET_PIP_POSITION.format(x=x), f"set pip_position={payload}")
+        await self._send(
+            self.profile.SET_PIP_POSITION.format(x=x),
+            f"set pip_position={payload}",
+            refresh="pip_position",
+        )
 
     async def set_pip_size(self, payload: str) -> None:
         x = self._index_of(self.profile.pip_size_options, payload, "PIP size")
-        await self._send(self.profile.SET_PIP_SIZE.format(x=x), f"set pip_size={payload}")
+        await self._send(
+            self.profile.SET_PIP_SIZE.format(x=x),
+            f"set pip_size={payload}",
+            refresh="pip_size",
+        )
 
     async def set_auto_switch(self, payload: str) -> None:
         """Auto-switch: on signal loss the device jumps to the next live input.
@@ -188,9 +212,17 @@ class Controller:
         if not self.profile.supports(CAP_AUTO_SWITCH):
             raise ControllerError(f"{self.profile.key} has no auto switch command")
         if payload == "ON":
-            await self._send(self.profile.SET_AUTO_SWITCH.format(x=1), "set auto_switch=on")
+            await self._send(
+                self.profile.SET_AUTO_SWITCH.format(x=1),
+                "set auto_switch=on",
+                refresh="auto_switch",
+            )
         elif payload == "OFF":
-            await self._send(self.profile.SET_AUTO_SWITCH.format(x=0), "set auto_switch=off")
+            await self._send(
+                self.profile.SET_AUTO_SWITCH.format(x=0),
+                "set auto_switch=off",
+                refresh="auto_switch",
+            )
         else:
             raise ControllerError(f"invalid auto switch payload: {payload!r}")
 
@@ -212,7 +244,9 @@ class Controller:
             raise ControllerError(
                 f"invalid EDID mode: {payload!r} (expected one of {list(options)})"
             ) from None
-        await self._send(self.profile.SET_INPUT_EDID.format(x=index), f"set edid={want}")
+        await self._send(
+            self.profile.SET_INPUT_EDID.format(x=index), f"set edid={want}", refresh="edid"
+        )
 
     # ---- Output settings ----
 
@@ -236,26 +270,36 @@ class Controller:
             )
         x = self._index_of(options, payload, "output resolution")
         await self._send(
-            self.profile.SET_OUTPUT_RES.format(x=x), f"set output_resolution={payload}"
+            self.profile.SET_OUTPUT_RES.format(x=x),
+            f"set output_resolution={payload}",
+            refresh="resolution",
         )
 
     async def set_hdcp(self, payload: str) -> None:
         if not self.profile.supports(CAP_HDCP):
             raise ControllerError(f"{self.profile.key} has no HDCP command")
         x = self._index_of(HDCP_OPTIONS, payload, "HDCP mode")
-        await self._send(self.profile.SET_OUTPUT_HDCP.format(x=x), f"set hdcp={payload}")
+        await self._send(
+            self.profile.SET_OUTPUT_HDCP.format(x=x), f"set hdcp={payload}", refresh="hdcp"
+        )
 
     async def set_vka(self, payload: str) -> None:
         if not self.profile.supports(CAP_VKA):
             raise ControllerError(f"{self.profile.key} has no VKA command")
         x = self._index_of(VKA_OPTIONS, payload, "VKA pattern")
-        await self._send(self.profile.SET_OUTPUT_VKA.format(x=x), f"set vka={payload}")
+        await self._send(
+            self.profile.SET_OUTPUT_VKA.format(x=x), f"set vka={payload}", refresh="vka"
+        )
 
     async def set_video_mode(self, payload: str) -> None:
         if not self.profile.supports(CAP_ITC):
             raise ControllerError(f"{self.profile.key} has no video-mode command")
         x = self._index_of(VIDEO_MODE_OPTIONS, payload, "video mode")
-        await self._send(self.profile.SET_OUTPUT_ITC.format(x=x), f"set video_mode={payload}")
+        await self._send(
+            self.profile.SET_OUTPUT_ITC.format(x=x),
+            f"set video_mode={payload}",
+            refresh="video_mode",
+        )
 
     # ---- Layout mode / aspect. Shared by both models. ----
 
@@ -263,7 +307,12 @@ class Controller:
         self, template: str, options: tuple[str, ...], payload: str, what: str
     ) -> None:
         x = self._index_of(options, payload, what)
-        await self._send(template.format(x=x), f"set {what}={payload}")
+        # `what` is always "<layout> <kind>", e.g. "quad aspect" -- but the PBP
+        # labels are capitalised ("PBP mode"), and the layout keys are not.
+        layout, kind = what.lower().split()
+        await self._send(
+            template.format(x=x), f"set {what}={payload}", refresh=f"layout:{layout}:{kind}"
+        )
 
     async def set_quad_mode(self, payload: str) -> None:
         await self._set_layout(
@@ -307,6 +356,12 @@ class Controller:
         await self._send(
             self.profile.SET_WINDOW_BORDER_PER_WINDOW.format(x=window_n, y=y),
             f"set window={window_n} border={payload}",
+            # No read-back: the only available read is the GLOBAL border
+            # command, whose topic no per-window switch subscribes to, so it
+            # would spend a round trip publishing where nothing listens. These
+            # four switches stay stateless until the UHD's reply to
+            # `r window 0 border!` is captured -- see refresh_window_border.
+            refresh=None,
         )
 
     async def set_window_border(self, payload: str) -> None:
@@ -317,9 +372,17 @@ class Controller:
                 f"{self.profile.key} sets borders per window; use set_window_border_for()"
             )
         if payload == "ON":
-            await self._send(self.profile.SET_WINDOW_BORDER.format(x=1), "set window_border=on")
+            await self._send(
+                self.profile.SET_WINDOW_BORDER.format(x=1),
+                "set window_border=on",
+                refresh="window_border",
+            )
         elif payload == "OFF":
-            await self._send(self.profile.SET_WINDOW_BORDER.format(x=0), "set window_border=off")
+            await self._send(
+                self.profile.SET_WINDOW_BORDER.format(x=0),
+                "set window_border=off",
+                refresh="window_border",
+            )
         else:
             raise ControllerError(f"invalid window border payload: {payload!r}")
 
@@ -332,15 +395,21 @@ class Controller:
         await self._send(
             self.profile.SET_WINDOW_BORDER_COLOR.format(x=window_n, y=y),
             f"set window={window_n} border_color={payload}",
+            # One read answers for all four windows.
+            refresh="border_colors",
         )
 
     async def set_source_osd(self, payload: str) -> None:
         if not self.profile.supports(CAP_SOURCE_OSD):
             raise ControllerError(f"{self.profile.key} has no source-OSD command")
         if payload == "ON":
-            await self._send(self.profile.SET_SOURCE_OSD.format(x=1), "set source_osd=on")
+            await self._send(
+                self.profile.SET_SOURCE_OSD.format(x=1), "set source_osd=on", refresh="source_osd"
+            )
         elif payload == "OFF":
-            await self._send(self.profile.SET_SOURCE_OSD.format(x=0), "set source_osd=off")
+            await self._send(
+                self.profile.SET_SOURCE_OSD.format(x=0), "set source_osd=off", refresh="source_osd"
+            )
         else:
             raise ControllerError(f"invalid source OSD payload: {payload!r}")
 
@@ -353,11 +422,26 @@ class Controller:
 
     # ---- low-level helpers ----
 
-    async def _send(self, command: str, descr: str) -> None:
+    async def _send(self, command: str, descr: str, refresh: str | None = None) -> None:
         log.info("mqtt_command_received", action=descr, command=command)
         success, response, error = await self.serial.send_command(command)
         if not success:
             log.warning("mqtt_command_failed", action=descr, error=error)
             raise ControllerError(f"serial command failed: {error}")
-        # Nudge the poller so HA sees the confirmed state quickly.
-        self.poller.trigger_immediate_poll()
+        # Read the setting we just changed straight back and publish it: one
+        # round trip, rather than waiting for it to come round on the sweep.
+        # Forced, so an unchanged value still reaches HA -- that is exactly the
+        # case where the device IGNORED the write, and it must not look silent.
+        try:
+            if refresh is not None:
+                await self.poller.refresh(refresh)
+        except Exception as exc:
+            # The write already succeeded, so the command must not be reported
+            # as failed -- and the nudge below must still happen. A narrower
+            # catch here let a bad refresh key cancel the nudge, sending that
+            # entity back to sweep latency: worse than having no read-back.
+            # Broker errors are not OSError either.
+            log.warning("post_set_refresh_failed", action=descr, key=refresh, error=str(exc))
+        finally:
+            # Nudge the poller so the REST of the state follows quickly too.
+            self.poller.trigger_immediate_poll()
