@@ -35,7 +35,11 @@ def _controller(profile_key: str):
     serial.send_command = AsyncMock(return_value=(True, "ok", None))
     settings = MagicMock()
     settings.device_profile = profile_key
-    return Controller(serial, MagicMock(), MagicMock(), settings), serial
+    # _send awaits poller.refresh(...) for the read-back, so the poller stand-in
+    # needs an awaitable. These tests assert rendered command strings only.
+    poller = MagicMock()
+    poller.refresh = AsyncMock()
+    return Controller(serial, MagicMock(), poller, settings), serial
 
 
 # --- profile lookup ---------------------------------------------------------

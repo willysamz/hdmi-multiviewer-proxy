@@ -167,9 +167,17 @@ class SerialHandler:
         log.info("serial_disconnected")
 
     async def _check_power_state(self) -> None:
-        """Check the device power state and update connection state."""
+        """Check the device power state and update connection state.
+
+        Takes the same lock as every other command. It used to call
+        `_send_command_internal` directly, so the 30s heartbeat could land in
+        the middle of another command's multi-line reply -- and now that each
+        write flushes the input buffer first, that interleave would discard
+        the other reader's response outright rather than just garbling it.
+        """
         try:
-            response = await self._send_command_internal("r power!")
+            async with self._lock:
+                response = await self._send_command_internal("r power!")
             if response:
                 if "power on" in response.lower():
                     self._state = ConnectionState.ON
@@ -249,6 +257,20 @@ class SerialHandler:
                 command = command.rstrip("\r\n") + "\r\n"
 
             # Send command
+            # Drop anything still buffered before writing. The device's reply
+            # to the PREVIOUS command can arrive in trailing segments after the
+            # drain loop below has exited -- especially over the socket://
+            # transport -- and would then be read as this command's answer.
+            # That matters most for the read-back a set now issues milliseconds
+            # later: the parsers accept the set-echo wording, so a desynced
+            # read would return the value we just commanded and report every
+            # write as successful, including ones the device ignored.
+            #
+            # This NARROWS that window, it does not close it: a segment still
+            # in flight arrives after the flush. Closing it properly means
+            # validating that a reply matches the command issued, which needs
+            # the real reply shapes captured per model first.
+            self._serial.reset_input_buffer()
             self._serial.write(command.encode("ascii"))
             self._serial.flush()
 
