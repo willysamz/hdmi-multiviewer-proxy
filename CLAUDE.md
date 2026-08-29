@@ -11,7 +11,7 @@ dialects**, selected at runtime by a **profile** (`app/profiles.py`):
 
 | profile | device | bundle | transport |
 |---|---|---|---|
-| `uhd401mv` | basement UHD-401MV | `04-hdmi-multiviewer-proxy` | usbip → `/dev/ttyUSB0` |
+| `uhd401mv` | basement UHD-401MV | `04-hdmi-multiviewer-proxy` | usbip, port pinned by-id |
 | `hds401mv` | garage HDS-401MV | `57-hdmi-multiviewer-garage` | `socket://192.168.1.80:6638` (ESPHome bridge) |
 
 The dialects differ by more than a prefix: the HDS wants `s power 1!` where the
@@ -75,8 +75,7 @@ carry copies of the user's actual config.
 
 ## Git workflow
 
-Finish work with a PR: branch, push, `gh pr create`. Merge with `--merge`
-(squash is disabled).
+Finish work with a PR: branch, push, `gh pr create`.
 
 **Work in a worktree, never the main checkout.** Several agent sessions share
 this repo root, which has exactly one `HEAD`, so a commit made there lands on
@@ -84,5 +83,5 @@ whatever branch another session is using.
 
     git worktree add .worktrees/<topic> -b <branch>
 
-`.worktrees/` is ignored via `.git/info/exclude`. Remove it when the branch
-merges: `git worktree remove .worktrees/<topic>`.
+`.worktrees/` is gitignored. Remove it when the branch merges:
+`git worktree remove .worktrees/<topic>`.
