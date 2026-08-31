@@ -44,3 +44,6 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Per-session worktrees (see CLAUDE.md)
+.worktrees/
